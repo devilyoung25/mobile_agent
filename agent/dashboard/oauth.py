@@ -132,7 +132,34 @@ def issue_session(*, login: str, email: str | None, avatar_url: str | None) -> s
     now = int(time.time())
     payload = {
         "sub": login,
+        "actor_id": f"github:{login.lower()}",
+        "auth_provider": "github",
+        "github_login": login,
         "email": email,
+        "avatar_url": avatar_url,
+        "iat": now,
+        "exp": now + SESSION_TTL_SECONDS,
+    }
+    return jwt.encode(payload, _secret(), algorithm=JWT_ALG)
+
+
+def issue_session_for_identity(
+    *,
+    actor_id: str,
+    auth_provider: str,
+    email: str | None,
+    name: str | None,
+    tenant_id: str | None = None,
+    avatar_url: str | None = None,
+) -> str:
+    now = int(time.time())
+    payload = {
+        "sub": actor_id,
+        "actor_id": actor_id,
+        "auth_provider": auth_provider,
+        "email": email,
+        "name": name,
+        "tenant_id": tenant_id,
         "avatar_url": avatar_url,
         "iat": now,
         "exp": now + SESSION_TTL_SECONDS,

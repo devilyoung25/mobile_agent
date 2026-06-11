@@ -1,4 +1,4 @@
-.PHONY: all format format-check lint test tests integration_tests help run dev
+.PHONY: all format format-check lint test tests integration_tests help run dev dev-all
 
 # Default target executed when no arguments are given to make.
 all: help
@@ -9,6 +9,9 @@ all: help
 
 dev:
 	uv run langgraph dev
+
+dev-all:
+	./scripts/dev-all.sh
 
 run:
 	uv run uvicorn agent.webapp:app --reload --port 8000
@@ -60,6 +63,7 @@ format-check:
 help:
 	@echo '----'
 	@echo 'dev                          - run LangGraph dev server'
+	@echo 'dev-all                      - run backend, frontend, ngrok, and Ollama'
 	@echo 'run                          - run webhook server'
 	@echo 'install                      - install dependencies'
 	@echo 'format                       - run code formatters'

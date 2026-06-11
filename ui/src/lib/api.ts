@@ -49,7 +49,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export interface SessionUser {
   login: string;
+  actor_id?: string;
+  auth_provider?: string;
   email: string | null;
+  name?: string | null;
+  tenant_id?: string | null;
   avatar_url: string | null;
   is_admin: boolean;
   slack_oauth_enabled?: boolean;
@@ -351,6 +355,12 @@ export const api = {
 };
 
 export function loginUrl(redirectTo?: string): string {
+  const target = redirectTo ?? (typeof window !== "undefined" ? window.location.origin : "");
+  const qs = target ? `?redirect_to=${encodeURIComponent(target)}` : "";
+  return `${API_BASE}/dashboard/api/entra/login${qs}`;
+}
+
+export function githubLoginUrl(redirectTo?: string): string {
   const target = redirectTo ?? (typeof window !== "undefined" ? window.location.origin : "");
   const qs = target ? `?redirect_to=${encodeURIComponent(target)}` : "";
   return `${API_BASE}/dashboard/api/auth/login${qs}`;

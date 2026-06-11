@@ -363,6 +363,24 @@ When you have completed your implementation, follow these steps in order:
 For code-change tasks, push the branch and notify the appropriate source once implementation is complete and code quality checks pass. Include the PR link when you opened or updated a PR; otherwise include the branch URL."""
 
 
+AZURE_DEVOPS_COMMIT_PR_SECTION = """---
+
+### Azure DevOps: Read-Only Context Phase
+
+This run is connected to Azure DevOps in a **read-only** capacity. You can gather context — work items, comments, relations, repositories, branches, pull requests, pipelines, and builds — through the available Azure DevOps tools, but you must NOT perform any persistent or write action.
+
+Specifically, in this phase you must NEVER:
+- Open, update, merge, or approve pull requests.
+- Create or delete branches, or push commits to Azure DevOps.
+- Comment on, close, or modify work items.
+- Queue or cancel pipelines/builds.
+- Change repository policies or permissions, or delete any resource.
+
+There is no `gh` CLI and no GitHub proxy in this run — do not attempt GitHub operations. Writes to Azure DevOps (creating a PR, commenting on a work item, relating a PR to a work item) are gated behind an explicit human approval step handled outside the agent; never assume that approval here.
+
+When you have finished gathering context and reasoning about the task, produce a concise technical summary of your findings and proposed change, and stop. Do not claim that a PR, branch, comment, or pipeline run was created."""
+
+
 COLLABORATION_TEMPLATE = """---
 
 ### Collaborative Attribution
@@ -431,7 +449,7 @@ SYSTEM_PROMPT_TEMPLATE = (
     + CODE_REVIEW_GUIDELINES_SECTION
     + COMMUNICATION_SECTION
     + EXTERNAL_UNTRUSTED_COMMENTS_SECTION
-    + COMMIT_PR_SECTION
+    + "{commit_pr_section}"
     + "{pr_policy_override_section}"
     + "{collaboration_section}"
     + "{repo_instructions_section}"
@@ -446,7 +464,9 @@ def construct_system_prompt(
     create_prs: bool = False,
     default_repo: dict[str, str] | None = None,
     repo_custom_instructions: str | None = None,
+    code_host: str = "github",
 ) -> str:
+    is_azure_devops = code_host == "azure_devops"
     default_prompt_section = _load_default_prompt()
     if default_repo and default_repo.get("owner") and default_repo.get("name"):
         repo_line = (
@@ -467,7 +487,12 @@ def construct_system_prompt(
         linear_project_id=linear_project_id or "<PROJECT_ID>",
         linear_issue_number=linear_issue_number or "<ISSUE_NUMBER>",
         default_prompt_section=default_prompt_section,
-        pr_policy_override_section=ALWAYS_CREATE_PR_SECTION if create_prs else "",
+        commit_pr_section=(
+            AZURE_DEVOPS_COMMIT_PR_SECTION if is_azure_devops else COMMIT_PR_SECTION
+        ),
+        pr_policy_override_section=(
+            ALWAYS_CREATE_PR_SECTION if create_prs and not is_azure_devops else ""
+        ),
         collaboration_section=_render_collaboration_section(triggering_user_identity),
         repo_instructions_section=_render_repo_instructions_section(repo_custom_instructions),
         commit_identity_name=commit_identity_name,

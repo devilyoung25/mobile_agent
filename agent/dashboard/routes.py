@@ -28,9 +28,20 @@ from .agent_usage import (
     refresh_usage_leaderboard_cache,
 )
 from .analyzer_cron import remove_continual_cron
+from .auth_tokens import upsert_auth_tokens
 from .enabled_repos import (
     list_enabled_review_repos,
     set_review_repo_enabled,
+)
+from .entra_oauth import (
+    build_authorize_url as build_entra_authorize_url,
+)
+from .entra_oauth import (
+    enforce_entra_allowlist,
+    exchange_entra_code,
+    identity_from_claims,
+    new_code_verifier,
+    validate_entra_id_token,
 )
 from .oauth import (
     COOKIE_NAME,
@@ -43,6 +54,7 @@ from .oauth import (
     fetch_github_user,
     hash_state_nonce,
     issue_session,
+    issue_session_for_identity,
     issue_state,
     new_state_nonce,
     require_same_origin_for_mutations,
@@ -136,6 +148,8 @@ router = APIRouter(
 )
 _GITHUB_API_TIMEOUT = httpx.Timeout(10.0, connect=3.0)
 _SKIPPABLE_INSTALLATION_REPO_STATUS_CODES = frozenset({403, 404})
+ENTRA_STATE_COOKIE_NAME = "osw_entra_state"
+ENTRA_PKCE_COOKIE_NAME = "osw_entra_pkce"
 
 
 def _require_admin(session: dict[str, Any]) -> dict[str, Any]:
@@ -237,6 +251,42 @@ def _clear_state_cookie(response: Response) -> None:
     )
 
 
+def _set_entra_state_cookie(response: Response, nonce: str) -> None:
+    secure, _ = _cookie_security()
+    response.set_cookie(
+        key=ENTRA_STATE_COOKIE_NAME,
+        value=nonce,
+        max_age=STATE_TTL_SECONDS,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        path="/dashboard/api/entra",
+    )
+
+
+def _set_entra_pkce_cookie(response: Response, code_verifier: str) -> None:
+    secure, _ = _cookie_security()
+    response.set_cookie(
+        key=ENTRA_PKCE_COOKIE_NAME,
+        value=code_verifier,
+        max_age=STATE_TTL_SECONDS,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        path="/dashboard/api/entra",
+    )
+
+
+def _clear_entra_cookies(response: Response) -> None:
+    secure, _ = _cookie_security()
+    response.delete_cookie(
+        ENTRA_STATE_COOKIE_NAME, path="/dashboard/api/entra", samesite="lax", secure=secure
+    )
+    response.delete_cookie(
+        ENTRA_PKCE_COOKIE_NAME, path="/dashboard/api/entra", samesite="lax", secure=secure
+    )
+
+
 def _set_slack_state_cookie(response: Response, nonce: str) -> None:
     secure, _ = _cookie_security()
     response.set_cookie(
@@ -320,6 +370,77 @@ async def auth_callback(request: Request, code: str, state: str) -> RedirectResp
     return response
 
 
+@router.get("/entra/login")
+async def entra_login(
+    request: Request,
+    redirect_to: str | None = None,
+) -> RedirectResponse:
+    safe_redirect = sanitize_redirect_to(redirect_to) or _frontend_base_url()
+    nonce = new_state_nonce()
+    state = issue_state(
+        redirect_to=safe_redirect,
+        nonce_hash=hash_state_nonce(nonce),
+    )
+    code_verifier = new_code_verifier()
+    redirect_uri = f"{_api_base_url()}/dashboard/api/entra/callback"
+    url = build_entra_authorize_url(
+        redirect_uri=redirect_uri,
+        state=state,
+        nonce=nonce,
+        code_verifier=code_verifier,
+    )
+    response = RedirectResponse(url, status_code=302)
+    _set_entra_state_cookie(response, nonce)
+    _set_entra_pkce_cookie(response, code_verifier)
+    return response
+
+
+@router.get("/entra/callback")
+async def entra_callback(request: Request, code: str, state: str) -> RedirectResponse:
+    state_payload = decode_state(state)
+    nonce_hash = state_payload.get("nonce_hash")
+    cookie_nonce = request.cookies.get(ENTRA_STATE_COOKIE_NAME)
+    code_verifier = request.cookies.get(ENTRA_PKCE_COOKIE_NAME)
+    if (
+        not isinstance(nonce_hash, str)
+        or not cookie_nonce
+        or not hmac.compare_digest(hash_state_nonce(cookie_nonce), nonce_hash)
+    ):
+        raise HTTPException(400, "entra oauth state mismatch — please retry login")
+    if not code_verifier:
+        raise HTTPException(400, "entra pkce verifier missing — please retry login")
+
+    redirect_to = sanitize_redirect_to(state_payload.get("redirect_to")) or _frontend_base_url()
+    redirect_uri = f"{_api_base_url()}/dashboard/api/entra/callback"
+    token_data = await exchange_entra_code(
+        code=code,
+        redirect_uri=redirect_uri,
+        code_verifier=code_verifier,
+    )
+    claims = await validate_entra_id_token(token_data["id_token"], nonce=cookie_nonce)
+    enforce_entra_allowlist(claims)
+    identity = identity_from_claims(claims)
+    await upsert_auth_tokens(
+        actor_id=identity.actor_id,
+        provider=identity.provider,
+        tenant_id=identity.tenant_id,
+        email=identity.normalized_email,
+        token_data=token_data,
+    )
+
+    session_jwt = issue_session_for_identity(
+        actor_id=identity.actor_id,
+        auth_provider=identity.provider,
+        email=identity.normalized_email,
+        name=identity.display_name,
+        tenant_id=identity.tenant_id,
+    )
+    response = RedirectResponse(redirect_to, status_code=302)
+    _set_session_cookie(response, session_jwt)
+    _clear_entra_cookies(response)
+    return response
+
+
 @router.post("/auth/logout")
 async def auth_logout() -> Response:
     response = Response(status_code=204)
@@ -331,8 +452,12 @@ async def auth_logout() -> Response:
 @router.get("/me")
 async def me(session: dict[str, Any] = _SESSION_DEP) -> dict[str, Any]:
     return {
-        "login": session["sub"],
+        "login": session.get("github_login") or session["sub"],
+        "actor_id": session.get("actor_id") or session["sub"],
+        "auth_provider": session.get("auth_provider") or "github",
         "email": session.get("email"),
+        "name": session.get("name"),
+        "tenant_id": session.get("tenant_id"),
         "avatar_url": session.get("avatar_url"),
         "is_admin": is_admin(session.get("email")),
         "slack_oauth_enabled": slack_oauth_configured(),
@@ -1023,6 +1148,8 @@ async def api_thread_commands(
         body,
         email=session.get("email"),
         content_type=request.headers.get("content-type", "application/json"),
+        auth_provider=session.get("auth_provider") or "github",
+        actor_id=session.get("actor_id") or session["sub"],
     )
     return Response(content=content, status_code=status_code, media_type=media_type)
 

@@ -576,15 +576,28 @@ async def _build_dashboard_configurable(
     *,
     profile: dict[str, Any] | None = None,
     overrides: dict[str, Any] | None = None,
+    auth_provider: str = "github",
+    actor_id: str | None = None,
+    email: str | None = None,
 ) -> dict[str, Any]:
+    is_entra = auth_provider == "entra"
     profile = profile if profile is not None else await get_profile(login) or {}
     thread_source = _thread_source(metadata)
     configurable: dict[str, Any] = {
         "thread_id": thread_id,
         "source": thread_source,
-        "github_login": login,
-        "user_email": await _resolve_run_email(login, profile),
+        "user_email": email if is_entra else await _resolve_run_email(login, profile),
     }
+    if is_entra:
+        # Entra runs are provider-neutral: the runtime keys off ``auth_provider``
+        # to skip GitHub token/proxy resolution and load Azure DevOps tools.
+        # No ``github_login`` so ``resolve_github_login`` returns None and the
+        # GitHub profile-override path is skipped; ``actor_id`` is the profile key.
+        configurable["auth_provider"] = "entra"
+        if actor_id:
+            configurable["actor_id"] = actor_id
+    else:
+        configurable["github_login"] = login
     repo_config = _repo_config_from_metadata(metadata)
     if repo_config:
         configurable["repo"] = repo_config
@@ -683,6 +696,9 @@ async def _enrich_run_start_command(
     metadata: dict[str, Any],
     thread_busy: bool = False,
     creating: bool = False,
+    auth_provider: str = "github",
+    actor_id: str | None = None,
+    email: str | None = None,
 ) -> dict[str, Any]:
     if command.get("method") != "run.start":
         return command
@@ -696,7 +712,8 @@ async def _enrich_run_start_command(
         params = {}
         command["params"] = params
 
-    await _ensure_dashboard_github_token(login)
+    if auth_provider != "entra":
+        await _ensure_dashboard_github_token(login)
 
     client_config = params.get("config")
     if not isinstance(client_config, dict):
@@ -751,6 +768,9 @@ async def _enrich_run_start_command(
         login,
         metadata,
         overrides=overrides,
+        auth_provider=auth_provider,
+        actor_id=actor_id,
+        email=email,
     )
 
     run_metadata = params.get("metadata")
@@ -1071,6 +1091,8 @@ async def proxy_dashboard_thread_commands(
     *,
     email: str | None = None,
     content_type: str = "application/json",
+    auth_provider: str = "github",
+    actor_id: str | None = None,
 ) -> tuple[int, bytes, str | None]:
     _require_json_content_type(content_type)
     try:
@@ -1115,6 +1137,9 @@ async def proxy_dashboard_thread_commands(
         metadata=metadata,
         thread_busy=thread_busy,
         creating=creating,
+        auth_provider=auth_provider,
+        actor_id=actor_id,
+        email=email,
     )
     outgoing = json.dumps(enriched).encode()
 

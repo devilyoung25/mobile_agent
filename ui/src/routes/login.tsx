@@ -1,9 +1,10 @@
 import { Navigate, createFileRoute } from "@tanstack/react-router";
 
 import { buttonVariants } from "@/components/ui/button";
+import { OnOffBrand } from "@/components/OnOffBrand";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { loginUrl } from "@/lib/api";
+import { githubLoginUrl, loginUrl } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
@@ -25,18 +26,25 @@ function Login() {
   }
 
   return (
-    <main className="flex min-h-svh items-center justify-center p-6">
-      <Card className="w-full max-w-md">
+    <main className="flex min-h-svh items-center justify-center bg-background p-6">
+      <Card className="w-full max-w-md border-border bg-card">
         <CardHeader>
-          <CardTitle>Sign in to open-swe</CardTitle>
+          <OnOffBrand className="mb-5" showMobileCue />
+          <CardTitle>Sign in to ON Mobile Agent</CardTitle>
           <CardDescription>
-            Use your GitHub account. We'll configure your default model, reasoning effort, and
-            default repo for Slack/Linear/GitHub triggered runs.
+            Use your corporate Microsoft account. GitHub sign-in remains available for legacy
+            review and integration flows.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           <a href={loginUrl()} className={cn(buttonVariants({ size: "lg" }), "w-full")}>
-            Continue with GitHub
+            Continue with Microsoft
+          </a>
+          <a
+            href={githubLoginUrl()}
+            className={cn(buttonVariants({ variant: "ghost" }), "w-full")}
+          >
+            Continue with GitHub legacy
           </a>
         </CardContent>
       </Card>

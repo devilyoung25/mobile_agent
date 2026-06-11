@@ -373,6 +373,52 @@ async def test_enrich_run_start_command_allowlists_client_configurable(monkeypat
     assert updates[-1]["model"] == _VISION_MODEL
 
 
+async def test_enrich_run_start_command_entra_sets_provider_neutral_configurable(
+    monkeypatch,
+) -> None:
+    class FakeThreads:
+        async def update(self, *, thread_id: str, metadata: dict[str, object]) -> None:
+            pass
+
+    class FakeClient:
+        threads = FakeThreads()
+
+    async def fake_get_profile(login: str) -> dict[str, object]:
+        return {}
+
+    async def fail_ensure_token(login: str) -> None:
+        raise AssertionError("Entra runs must not resolve a GitHub token")
+
+    async def fail_resolve_email(login: str, profile: dict[str, object]) -> str:
+        raise AssertionError("Entra runs must use the session email, not GitHub mapping")
+
+    monkeypatch.setattr(thread_api, "langgraph_client", lambda: FakeClient())
+    monkeypatch.setattr(thread_api, "get_profile", fake_get_profile)
+    monkeypatch.setattr(thread_api, "_ensure_dashboard_github_token", fail_ensure_token)
+    monkeypatch.setattr(thread_api, "_resolve_run_email", fail_resolve_email)
+
+    command = {
+        "method": "run.start",
+        "params": {"config": {"configurable": {}}},
+    }
+
+    enriched = await thread_api._enrich_run_start_command(
+        "tid",
+        "entra:user-oid",
+        command,
+        metadata={"source": "dashboard", "github_login": "entra:user-oid"},
+        auth_provider="entra",
+        actor_id="entra:user-oid",
+        email="dev@example.com",
+    )
+
+    configurable = enriched["params"]["config"]["configurable"]
+    assert configurable["auth_provider"] == "entra"
+    assert configurable["actor_id"] == "entra:user-oid"
+    assert configurable["user_email"] == "dev@example.com"
+    assert "github_login" not in configurable
+
+
 async def test_proxy_commands_rejects_non_object_body(monkeypatch) -> None:
     class FakeThreads:
         async def get(self, thread_id: str) -> dict[str, object]:
