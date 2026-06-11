@@ -35,7 +35,7 @@ def test_is_azure_devops_read_only_tool_blocks_persistent_operations() -> None:
 def test_filtered_read_only_tools_drops_write_tools() -> None:
     read_tool = SimpleNamespace(name="mcp_ado_wit_get_work_item")
     write_tool = SimpleNamespace(name="mcp_ado_repo_create_pull_request")
-    other_tool = SimpleNamespace(name="slack_thread_reply")
+    other_tool = SimpleNamespace(name="fetch_url")
 
     assert azure_devops_mcp._filtered_read_only_tools([read_tool, write_tool, other_tool]) == [
         read_tool
@@ -43,22 +43,11 @@ def test_filtered_read_only_tools_drops_write_tools() -> None:
 
 
 @pytest.mark.asyncio
-async def test_load_azure_devops_tools_skips_non_entra_auth(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("AZURE_DEVOPS_MCP_ORG", "onoff")
-
-    with patch.object(azure_devops_mcp, "_build_mcp_tools", new_callable=AsyncMock) as build:
-        tools = await azure_devops_mcp.load_azure_devops_read_only_tools(auth_provider="github")
-
-    assert tools == []
-    build.assert_not_awaited()
-
-
-@pytest.mark.asyncio
 async def test_load_azure_devops_tools_skips_without_org(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AZURE_DEVOPS_MCP_ORG", raising=False)
 
     with patch.object(azure_devops_mcp, "_build_mcp_tools", new_callable=AsyncMock) as build:
-        tools = await azure_devops_mcp.load_azure_devops_read_only_tools(auth_provider="entra")
+        tools = await azure_devops_mcp.load_azure_devops_read_only_tools()
 
     assert tools == []
     build.assert_not_awaited()
@@ -78,7 +67,7 @@ async def test_load_azure_devops_tools_filters_loaded_tools(
         new_callable=AsyncMock,
         return_value=[read_tool, write_tool],
     ) as build:
-        tools = await azure_devops_mcp.load_azure_devops_read_only_tools(auth_provider="entra")
+        tools = await azure_devops_mcp.load_azure_devops_read_only_tools()
 
     assert tools == [read_tool]
     build.assert_awaited_once()

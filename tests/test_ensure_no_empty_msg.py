@@ -2,10 +2,9 @@ from unittest.mock import MagicMock, patch
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from agent.middleware.check_message_queue import DASHBOARD_HANDOFF_INSTRUCTION
 from agent.middleware.ensure_no_empty_msg import (
+    DASHBOARD_HANDOFF_MARKER,
     check_if_confirming_completion,
-    check_if_model_messaged_user,
     ensure_no_empty_msg,
     get_every_message_since_last_human,
 )
@@ -71,33 +70,6 @@ class TestGetEveryMessageSinceLastHuman:
         assert result[2].content == "ai 2"
 
 
-class TestCheckIfModelMessagedUser:
-    def test_returns_true_for_slack_thread_reply(self) -> None:
-        messages = [
-            ToolMessage(content="sent", tool_call_id="123", name="slack_thread_reply"),
-        ]
-
-        assert check_if_model_messaged_user(messages) is True
-
-    def test_returns_true_for_linear_comment(self) -> None:
-        messages = [
-            ToolMessage(content="commented", tool_call_id="123", name="linear_comment"),
-        ]
-
-        assert check_if_model_messaged_user(messages) is True
-
-    def test_returns_false_for_other_tools(self) -> None:
-        messages = [
-            ToolMessage(content="result", tool_call_id="123", name="bash"),
-            ToolMessage(content="result", tool_call_id="456", name="read_file"),
-        ]
-
-        assert check_if_model_messaged_user(messages) is False
-
-    def test_returns_false_for_empty_list(self) -> None:
-        assert check_if_model_messaged_user([]) is False
-
-
 class TestCheckIfConfirmingCompletion:
     def test_returns_true_when_confirming_completion_called(self) -> None:
         messages = [
@@ -131,35 +103,7 @@ class TestEnsureNoEmptyMsgNotify:
     def _make_runtime(self) -> MagicMock:
         return MagicMock()
 
-    def test_returns_none_when_user_messaged(self) -> None:
-        empty_ai = AIMessage(content="")
-        state = {
-            "messages": [
-                HumanMessage(content="fix the bug"),
-                ToolMessage(content="message sent", tool_call_id="1", name="slack_thread_reply"),
-                empty_ai,
-            ]
-        }
-
-        result = ensure_no_empty_msg.after_model(state, self._make_runtime())
-
-        assert result is None
-
-    def test_returns_none_with_linear_comment(self) -> None:
-        empty_ai = AIMessage(content="")
-        state = {
-            "messages": [
-                HumanMessage(content="fix the bug"),
-                ToolMessage(content="commented", tool_call_id="1", name="linear_comment"),
-                empty_ai,
-            ]
-        }
-
-        result = ensure_no_empty_msg.after_model(state, self._make_runtime())
-
-        assert result is None
-
-    def test_injects_no_op_when_user_not_messaged(self) -> None:
+    def test_injects_no_op_for_empty_message(self) -> None:
         empty_ai = AIMessage(content="")
         state = {
             "messages": [
@@ -174,20 +118,6 @@ class TestEnsureNoEmptyMsgNotify:
         assert result is not None
         assert len(result["messages"]) == 2
         assert result["messages"][0].tool_calls[0]["name"] == "no_op"
-
-    def test_returns_none_when_only_user_messaged(self) -> None:
-        empty_ai = AIMessage(content="")
-        state = {
-            "messages": [
-                HumanMessage(content="fix the bug"),
-                ToolMessage(content="message sent", tool_call_id="1", name="slack_thread_reply"),
-                empty_ai,
-            ]
-        }
-
-        result = ensure_no_empty_msg.after_model(state, self._make_runtime())
-
-        assert result is None
 
     def test_skips_confirming_completion_for_dashboard_source(self) -> None:
         ai = AIMessage(content="Hi! How can I help?")
@@ -213,7 +143,7 @@ class TestEnsureNoEmptyMsgNotify:
             "messages": [
                 HumanMessage(
                     content=[
-                        {"type": "text", "text": DASHBOARD_HANDOFF_INSTRUCTION},
+                        {"type": "text", "text": f"{DASHBOARD_HANDOFF_MARKER} continue"},
                         {"type": "text", "text": "continue in web"},
                     ]
                 ),
@@ -223,7 +153,7 @@ class TestEnsureNoEmptyMsgNotify:
 
         with patch(
             "agent.middleware.ensure_no_empty_msg.get_config",
-            return_value={"configurable": {"source": "slack"}},
+            return_value={"configurable": {"source": "automation"}},
         ):
             result = ensure_no_empty_msg.after_model(state, self._make_runtime())
 

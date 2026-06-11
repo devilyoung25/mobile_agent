@@ -15,7 +15,7 @@ def web_search(
 ) -> dict[str, Any]:
     """Search the web using Exa to find relevant information.
 
-    Use this tool when you need to find documentation, code examples, GitHub repos,
+    Use this tool when you need to find documentation, code examples, code repositories,
     news, or research papers to help complete a task.
 
     Args:

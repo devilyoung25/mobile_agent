@@ -8,7 +8,6 @@ from langgraph.prebuilt.tool_node import ToolCallRequest
 from langsmith.sandbox import SandboxClientError
 
 from agent.middleware.sandbox_circuit_breaker import (
-    SANDBOX_UNRECOVERABLE_MESSAGE,
     SandboxCircuitBreakerMiddleware,
 )
 from agent.middleware.tool_error_handler import ToolErrorMiddleware
@@ -169,48 +168,3 @@ def test_repeated_sandbox_recreations_trigger_circuit_breaker() -> None:
     assert result is not None
     assert result["jump_to"] == "end"
     assert "consecutive sandbox recreations" in result["messages"][0].content
-
-
-@pytest.mark.asyncio
-async def test_circuit_breaker_posts_one_user_notification() -> None:
-    middleware = SandboxCircuitBreakerMiddleware(threshold=2)
-    state = {
-        "messages": [
-            AIMessage(
-                content=(
-                    "Sandbox circuit breaker triggered: 3 consecutive sandbox tool failures "
-                    "against sb-dead."
-                )
-            )
-        ]
-    }
-    config = {
-        "configurable": {
-            "slack_thread": {"channel_id": "C123", "thread_ts": "171.123"},
-            "linear_issue": {"id": "lin-1"},
-            "repo": {"owner": "langchain-ai", "name": "open-swe"},
-            "pr_number": 7,
-        }
-    }
-
-    with (
-        patch("agent.middleware.sandbox_circuit_breaker.get_config", return_value=config),
-        patch(
-            "agent.middleware.sandbox_circuit_breaker.post_slack_thread_reply",
-            new_callable=AsyncMock,
-        ) as mock_slack,
-        patch(
-            "agent.middleware.sandbox_circuit_breaker.comment_on_linear_issue",
-            new_callable=AsyncMock,
-        ) as mock_linear,
-        patch(
-            "agent.middleware.sandbox_circuit_breaker.post_github_comment",
-            new_callable=AsyncMock,
-        ) as mock_github,
-    ):
-        result = await middleware.aafter_agent(state, MagicMock())
-
-    assert result is None
-    mock_slack.assert_awaited_once_with("C123", "171.123", SANDBOX_UNRECOVERABLE_MESSAGE)
-    mock_linear.assert_not_called()
-    mock_github.assert_not_called()

@@ -121,36 +121,18 @@ async def test_load_observability_tools_loaded_when_authorized() -> None:
 async def test_observability_authorized_gates_on_admin(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CONFIGURED_ADMINS", "admin@example.com")
     monkeypatch.delenv("OBSERVABILITY_AUTHORIZED_EMAILS", raising=False)
-    monkeypatch.setattr(server, "email_for_login", AsyncMock(return_value=None))
 
     admin_config = {"configurable": {"user_email": "admin@example.com"}}
     other_config = {"configurable": {"user_email": "attacker@example.com"}}
 
-    assert await server._observability_authorized(admin_config, None) is True
-    assert await server._observability_authorized(other_config, None) is False
+    assert server._observability_authorized(admin_config) is True
+    assert server._observability_authorized(other_config) is False
 
 
 @pytest.mark.asyncio
 async def test_observability_authorized_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CONFIGURED_ADMINS", "")
     monkeypatch.setenv("OBSERVABILITY_AUTHORIZED_EMAILS", "trusted@example.com")
-    monkeypatch.setattr(server, "email_for_login", AsyncMock(return_value=None))
 
     config = {"configurable": {"user_email": "trusted@example.com"}}
-    assert await server._observability_authorized(config, None) is True
-
-
-@pytest.mark.asyncio
-async def test_observability_authorized_resolves_login_email(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("CONFIGURED_ADMINS", "dev@example.com")
-    monkeypatch.delenv("OBSERVABILITY_AUTHORIZED_EMAILS", raising=False)
-    monkeypatch.setattr(
-        server,
-        "email_for_login",
-        AsyncMock(side_effect=lambda login: "dev@example.com" if login else None),
-    )
-
-    config = {"configurable": {"github_login": "dev"}}
-    assert await server._observability_authorized(config, "dev") is True
+    assert server._observability_authorized(config) is True

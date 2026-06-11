@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from fastapi import HTTPException
 from pydantic import ValidationError
 
 from agent.dashboard import schedules
@@ -98,31 +97,14 @@ def fake_client(monkeypatch) -> _FakeClient:  # noqa: ANN001
 
 @pytest.fixture
 def auth(monkeypatch) -> None:  # noqa: ANN001
-    async def fake_get_valid_access_token(login: str) -> str:
-        return "gho_token"
-
     async def fake_get_profile(login: str) -> dict[str, Any]:
         return {"base_branch": "main", "branch_prefix": "open-swe"}
 
     async def fake_resolve_run_email(login: str, profile: dict[str, Any]) -> str:
         return "alice@example.com"
 
-    async def fake_repo_config_for_user(login: str, full_name: str | None) -> dict[str, str] | None:
-        if not full_name:
-            return None
-        owner, name = full_name.split("/", 1)
-        return {"owner": owner, "name": name}
-
-    async def fake_require_repo_access_for_user(login: str, full_name: str) -> str:
-        return "gho_token"
-
-    monkeypatch.setattr(schedules, "get_valid_access_token", fake_get_valid_access_token)
     monkeypatch.setattr(schedules, "get_profile", fake_get_profile)
     monkeypatch.setattr(schedules, "_resolve_run_email", fake_resolve_run_email)
-    monkeypatch.setattr(schedules, "repo_config_for_user", fake_repo_config_for_user)
-    monkeypatch.setattr(
-        schedules, "require_repo_access_for_user", fake_require_repo_access_for_user
-    )
 
 
 def test_cron_validation_rejects_non_five_field_expression() -> None:
@@ -155,41 +137,6 @@ async def test_create_agent_schedule_registers_scheduler_cron(fake_client, auth)
     assert created["input"]["schedule_id"] == result["id"]
     assert created["config"]["configurable"]["schedule_id"] == result["id"]
     assert created["metadata"]["kind"] == "agent_schedule"
-
-
-async def test_create_agent_schedule_requires_dashboard_token(fake_client, monkeypatch) -> None:  # noqa: ANN001, ARG001
-    async def no_token(login: str) -> None:
-        return None
-
-    monkeypatch.setattr(schedules, "get_valid_access_token", no_token)
-
-    with pytest.raises(HTTPException) as exc:
-        await schedules.create_agent_schedule(
-            "alice", ScheduleCreateBody(prompt="hello", schedule="0 9 * * 1")
-        )
-
-    assert exc.value.status_code == 401
-    assert fake_client.crons.created == []
-
-
-async def test_create_agent_schedule_requires_repo_access(fake_client, auth, monkeypatch) -> None:  # noqa: ANN001, ARG001
-    async def deny_repo(login: str, full_name: str | None) -> dict[str, str] | None:
-        raise HTTPException(403, "no access to this private repository")
-
-    monkeypatch.setattr(schedules, "repo_config_for_user", deny_repo)
-
-    with pytest.raises(HTTPException) as exc:
-        await schedules.create_agent_schedule(
-            "alice",
-            ScheduleCreateBody(
-                prompt="hello",
-                schedule="0 9 * * 1",
-                repo="victim/private",
-            ),
-        )
-
-    assert exc.value.status_code == 403
-    assert fake_client.crons.created == []
 
 
 async def test_list_agent_schedules_uses_owner_filters_and_paginates(fake_client) -> None:  # noqa: ANN001
@@ -235,40 +182,6 @@ async def test_list_agent_schedules_uses_owner_filters_and_paginates(fake_client
     assert {item["id"] for item in result} == {f"alice_{i}" for i in range(125)}
 
 
-async def test_update_agent_schedule_rechecks_repo_access(fake_client, auth, monkeypatch) -> None:  # noqa: ANN001, ARG001
-    record = {
-        "id": "sched_1",
-        "name": "Daily",
-        "prompt": "Run daily",
-        "schedule": "0 9 * * *",
-        "repo": None,
-        "model": "Default",
-        "effort": None,
-        "enabled": True,
-        "cron_id": "cron_old",
-        "created_by": "alice",
-        "user_email": "alice@example.com",
-        "created_at": "2026-01-01T00:00:00+00:00",
-        "updated_at": "2026-01-01T00:00:00+00:00",
-    }
-    await fake_client.store.put_item(schedules.SCHEDULES_NAMESPACE, "sched_1", record)
-
-    async def repo_config(login: str, full_name: str | None) -> dict[str, str] | None:
-        assert full_name == "langchain-ai/open-swe"
-        return {"owner": "langchain-ai", "name": "open-swe"}
-
-    monkeypatch.setattr(schedules, "repo_config_for_user", repo_config)
-
-    result = await schedules.update_agent_schedule(
-        "sched_1",
-        "alice",
-        ScheduleUpdateBody(repo="langchain-ai/open-swe"),
-        email="alice@example.com",
-    )
-
-    assert result["repo"] == "langchain-ai/open-swe"
-
-
 async def test_update_agent_schedule_pause_deletes_cron(fake_client) -> None:  # noqa: ANN001
     record = {
         "id": "sched_1",
@@ -294,45 +207,6 @@ async def test_update_agent_schedule_pause_deletes_cron(fake_client) -> None:  #
     assert result["enabled"] is False
     assert result["cronId"] is None
     assert fake_client.crons.deleted == ["cron_old"]
-
-
-async def test_launch_scheduled_agent_run_skips_when_repo_access_revoked(
-    fake_client, auth, monkeypatch
-) -> None:  # noqa: ANN001, ARG001
-    record = {
-        "id": "sched_1",
-        "name": "Weekly dependencies",
-        "prompt": "Check dependencies and open a PR if needed",
-        "schedule": "0 9 * * 1",
-        "repo": {"owner": "langchain-ai", "name": "open-swe"},
-        "model": "Default",
-        "effort": None,
-        "base_branch": "main",
-        "branch_prefix": "open-swe",
-        "enabled": True,
-        "cron_id": "cron_1",
-        "created_by": "alice",
-        "user_email": "alice@example.com",
-        "created_at": "2026-01-01T00:00:00+00:00",
-        "updated_at": "2026-01-01T00:00:00+00:00",
-    }
-    await fake_client.store.put_item(schedules.SCHEDULES_NAMESPACE, "sched_1", record)
-
-    async def deny_access(login: str, full_name: str) -> str:
-        raise HTTPException(403, "no access to this private repository")
-
-    monkeypatch.setattr(schedules, "require_repo_access_for_user", deny_access)
-
-    result = await schedules.launch_scheduled_agent_run("sched_1")
-
-    assert result == {
-        "status": "unauthorized",
-        "schedule_id": "sched_1",
-        "error": "no access to this private repository",
-    }
-    assert fake_client.runs.created == []
-    stored = fake_client.store.items[(tuple(schedules.SCHEDULES_NAMESPACE), "sched_1")]
-    assert stored["last_error"] == "no access to this private repository"
 
 
 async def test_launch_scheduled_agent_run_starts_fresh_agent_thread(fake_client, auth) -> None:  # noqa: ANN001, ARG001

@@ -18,7 +18,7 @@ async def test_agent_uses_profile_subagent_model_override() -> None:
         "configurable": {
             "__is_for_execution__": True,
             "thread_id": "thread-123",
-            "github_login": "octocat",
+            "actor_id": "github:octocat",
         },
         "metadata": {},
     }
@@ -31,11 +31,6 @@ async def test_agent_uses_profile_subagent_model_override() -> None:
         return _DummyAgent()
 
     with (
-        patch(
-            "agent.server.resolve_github_token",
-            new_callable=AsyncMock,
-            return_value=("ghp", None),
-        ),
         patch("agent.server.resolve_triggering_user_identity", return_value=None),
         patch(
             "agent.server.ensure_sandbox_for_thread",
@@ -91,7 +86,7 @@ async def test_agent_subagent_inherits_profile_model_override_without_explicit_p
         "configurable": {
             "__is_for_execution__": True,
             "thread_id": "thread-123",
-            "github_login": "octocat",
+            "actor_id": "github:octocat",
         },
         "metadata": {},
     }
@@ -104,11 +99,6 @@ async def test_agent_subagent_inherits_profile_model_override_without_explicit_p
         return _DummyAgent()
 
     with (
-        patch(
-            "agent.server.resolve_github_token",
-            new_callable=AsyncMock,
-            return_value=("ghp", None),
-        ),
         patch("agent.server.resolve_triggering_user_identity", return_value=None),
         patch(
             "agent.server.ensure_sandbox_for_thread",

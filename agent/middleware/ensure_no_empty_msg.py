@@ -6,7 +6,7 @@ from langchain_core.messages import AnyMessage, ToolMessage
 from langgraph.config import get_config
 from langgraph.runtime import Runtime
 
-from .check_message_queue import DASHBOARD_HANDOFF_MARKER
+DASHBOARD_HANDOFF_MARKER = "[Open SWE Web handoff]"
 
 _DASHBOARD_SOURCE = "dashboard"
 
@@ -19,16 +19,6 @@ def get_every_message_since_last_human(state: AgentState) -> list[AnyMessage]:
             last_human_idx = i
             break
     return messages[last_human_idx + 1 :]
-
-
-def check_if_model_messaged_user(messages: list[AnyMessage]) -> bool:
-    for msg in messages:
-        if msg.type == "tool" and msg.name in [
-            "slack_thread_reply",
-            "linear_comment",
-        ]:
-            return True
-    return False
 
 
 def check_if_confirming_completion(messages: list[AnyMessage]) -> bool:
@@ -84,9 +74,6 @@ def ensure_no_empty_msg(state: AgentState, runtime: Runtime) -> dict[str, Any] |
         if check_if_no_op(messages_since_last_human):
             return None
 
-        if check_if_model_messaged_user(messages_since_last_human):
-            return None
-
         tc_id = str(uuid4())
         last_msg.tool_calls = [{"name": "no_op", "args": {}, "id": tc_id}]
         no_op_tool_msg = ToolMessage(
@@ -102,8 +89,7 @@ def ensure_no_empty_msg(state: AgentState, runtime: Runtime) -> dict[str, Any] |
         messages_since_last_human = get_every_message_since_last_human(state)
 
         if (
-            check_if_model_messaged_user(messages_since_last_human)
-            or check_if_confirming_completion(messages_since_last_human)
+            check_if_confirming_completion(messages_since_last_human)
             or _is_dashboard_source()
             or _last_human_is_dashboard_handoff(state)
         ):
@@ -112,7 +98,7 @@ def ensure_no_empty_msg(state: AgentState, runtime: Runtime) -> dict[str, Any] |
         tc_id = str(uuid4())
         last_msg.tool_calls = [{"name": "confirming_completion", "args": {}, "id": tc_id}]
         no_op_tool_msg = ToolMessage(
-            content="Confirming task completion. I see you did not call a tool, which would end the task, however you haven't called a tool to message the user or open a pull request."
+            content="Confirming task completion. I see you did not call a tool, which would end the task."
             + "This may indicate premature termination - please ensure you fully complete the task before ending it. "
             + "If you do not call any tools it will end the task.",
             name="confirming_completion",

@@ -25,8 +25,7 @@ def test_build_chat_model_routes_ollama_to_openai_compatible_client(
 
     with patch("agent.models.resolver.ChatOpenAI", return_value=model) as chat_openai:
         assert (
-            build_chat_model("ollama-local:gpt-oss:120b-cloud", "high", max_tokens=64_000)
-            is model
+            build_chat_model("ollama-local:gpt-oss:120b-cloud", "high", max_tokens=64_000) is model
         )
 
     chat_openai.assert_called_once_with(
@@ -42,12 +41,15 @@ def test_build_chat_model_preserves_supported_provider_kwargs() -> None:
     model = MagicMock(name="provider_model")
     factory = MagicMock(return_value=model)
 
-    assert build_chat_model(
-        "anthropic:claude-opus-4-8",
-        "high",
-        max_tokens=16_000,
-        model_factory=factory,
-    ) is model
+    assert (
+        build_chat_model(
+            "anthropic:claude-opus-4-8",
+            "high",
+            max_tokens=16_000,
+            model_factory=factory,
+        )
+        is model
+    )
 
     factory.assert_called_once_with(
         "anthropic:claude-opus-4-8",
@@ -55,4 +57,3 @@ def test_build_chat_model_preserves_supported_provider_kwargs() -> None:
         thinking={"type": "adaptive", "display": "summarized"},
         effort="high",
     )
-

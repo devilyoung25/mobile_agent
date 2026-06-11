@@ -11,9 +11,9 @@ from fastapi import HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from ..utils.thread_ops import langgraph_client
+from .agent_instructions import normalize_repo_full_name
 from .options import SUPPORTED_MODEL_IDS, model_supports_effort
-from .profiles import get_profile, get_valid_access_token
-from .repo_access import repo_config_for_user, require_repo_access_for_user
+from .profiles import get_profile
 from .thread_api import _agent_version_metadata, _now_ms, _resolve_run_email
 
 logger = logging.getLogger(__name__)
@@ -215,10 +215,16 @@ async def list_agent_schedules(login: str, *, email: str | None = None) -> list[
     return [_schedule_summary(record) for record in records]
 
 
-async def _ensure_dashboard_github_token(login: str) -> None:
-    token = await get_valid_access_token(login)
-    if not token:
-        raise HTTPException(401, "github token unavailable, re-login required")
+def _repo_config_from_full_name(full_name: str | None) -> dict[str, str] | None:
+    """Parse ``owner/repo`` into a repo config (no code-host access check)."""
+    if not isinstance(full_name, str) or not full_name.strip():
+        return None
+    try:
+        normalized = normalize_repo_full_name(full_name)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    owner, name = normalized.split("/", 1)
+    return {"owner": owner, "name": name}
 
 
 def _build_cron_config(record: dict[str, Any]) -> dict[str, Any]:
@@ -239,7 +245,7 @@ async def _create_cron(record: dict[str, Any]) -> str:
         metadata={
             "kind": "agent_schedule",
             "schedule_id": record["id"],
-            "github_login": record.get("created_by"),
+            "actor_id": record.get("created_by"),
         },
     )
     cron_id = cron.get("cron_id") if isinstance(cron, dict) else getattr(cron, "cron_id", None)
@@ -260,10 +266,9 @@ async def _delete_cron(cron_id: str | None) -> None:
 async def create_agent_schedule(
     login: str, body: ScheduleCreateBody, *, email: str | None = None
 ) -> dict[str, Any]:
-    await _ensure_dashboard_github_token(login)
     profile = await get_profile(login) or {}
     chosen_model, chosen_effort = _normalize_model_choice(body.model_id, body.effort)
-    repo = await repo_config_for_user(login, body.repo)
+    repo = _repo_config_from_full_name(body.repo)
     schedule_id = str(uuid.uuid4())
     now = _now_iso()
     record: dict[str, Any] = {
@@ -314,7 +319,7 @@ async def update_agent_schedule(
     if body.name is not None:
         patch["name"] = body.name.strip() or _derive_name(patch.get("prompt", existing["prompt"]))
     if body.repo is not None:
-        patch["repo"] = await repo_config_for_user(login, body.repo)
+        patch["repo"] = _repo_config_from_full_name(body.repo)
     if body.model_id is not None or body.effort is not None:
         model, effort = _normalize_model_choice(body.model_id, body.effort)
         if model and effort:
@@ -359,7 +364,7 @@ def _agent_run_metadata(record: dict[str, Any], thread_id: str) -> dict[str, Any
         "source": "schedule",
         "schedule_id": record["id"],
         "schedule_name": record.get("name"),
-        "github_login": record.get("created_by"),
+        "actor_id": record.get("created_by"),
         "triggering_user_email": record.get("user_email"),
         "title": f"Scheduled: {record.get('name') or 'Agent'}",
         "base_branch": record.get("base_branch") or "main",
@@ -379,7 +384,7 @@ def _agent_run_config(record: dict[str, Any], thread_id: str) -> dict[str, Any]:
     configurable: dict[str, Any] = {
         "thread_id": thread_id,
         "source": "schedule",
-        "github_login": record.get("created_by"),
+        "actor_id": record.get("created_by"),
         "user_email": record.get("user_email"),
         "schedule_id": record["id"],
     }
@@ -417,17 +422,6 @@ async def launch_scheduled_agent_run(schedule_id: str) -> dict[str, Any]:
                 "schedule_id": schedule_id,
                 "error": "schedule owner unavailable",
             }
-        try:
-            await require_repo_access_for_user(login, full_name)
-        except HTTPException as exc:
-            await _put_value(
-                {
-                    **record,
-                    "last_error": str(exc.detail),
-                    "last_error_at": _now_iso(),
-                }
-            )
-            return {"status": "unauthorized", "schedule_id": schedule_id, "error": exc.detail}
 
     thread_id = str(uuid.uuid4())
     metadata = _agent_run_metadata(record, thread_id)

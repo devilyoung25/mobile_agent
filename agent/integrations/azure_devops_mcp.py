@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from datetime import timedelta
@@ -11,9 +12,7 @@ from langchain_core.tools import BaseTool
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_AZURE_DEVOPS_DOMAINS = (
-    "core,work,work-items,repositories,pipelines,test-plans,search,wiki"
-)
+DEFAULT_AZURE_DEVOPS_DOMAINS = "core,work,work-items,repositories,pipelines,test-plans,search,wiki"
 _MCP_TIMEOUT_SECONDS = 30.0
 _READ_ONLY_MARKERS = ("_list_", "_get_", "_search_", "_query_", "_show_")
 _READ_ONLY_SUFFIXES = ("_my_work_items",)
@@ -102,16 +101,19 @@ def _server_config() -> dict[str, Any] | None:
 
 
 async def _build_mcp_tools(config: dict[str, Any]) -> list[BaseTool]:
-    from langchain_mcp_adapters.client import MultiServerMCPClient
+    def _make_client() -> Any:
+        # Imported in a thread: the import chain (mcp -> jsonschema) does
+        # blocking filesystem I/O that the ASGI event loop must not run.
+        from langchain_mcp_adapters.client import MultiServerMCPClient
 
-    client = MultiServerMCPClient({"azure-devops": config})
+        return MultiServerMCPClient({"azure-devops": config})
+
+    client = await asyncio.to_thread(_make_client)
     return await client.get_tools()
 
 
-async def load_azure_devops_read_only_tools(*, auth_provider: str | None) -> list[BaseTool]:
-    """Load read-only Azure DevOps MCP tools for Microsoft Entra runs."""
-    if auth_provider != "entra":
-        return []
+async def load_azure_devops_read_only_tools() -> list[BaseTool]:
+    """Load read-only Azure DevOps MCP tools when an organization is configured."""
     config = _server_config()
     if config is None:
         logger.info("Azure DevOps MCP disabled: AZURE_DEVOPS_MCP_ORG is not configured")

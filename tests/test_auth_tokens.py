@@ -10,7 +10,9 @@ async def test_upsert_auth_tokens_encrypts_provider_tokens() -> None:
 
     with (
         patch("agent.dashboard.auth_tokens.get_client", return_value=client),
-        patch("agent.dashboard.auth_tokens.encrypt_token", side_effect=lambda token: f"enc:{token}"),
+        patch(
+            "agent.dashboard.auth_tokens.encrypt_token", side_effect=lambda token: f"enc:{token}"
+        ),
     ):
         await upsert_auth_tokens(
             actor_id="entra:user-oid",
@@ -34,4 +36,3 @@ async def test_upsert_auth_tokens_encrypts_provider_tokens() -> None:
     assert value["provider"] == "entra"
     assert value["tenant_id"] == "tenant-id"
     assert value["scopes"] == "openid profile"
-

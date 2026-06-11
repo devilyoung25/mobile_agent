@@ -13,15 +13,26 @@ from typing import Any
 from langgraph_sdk import get_client
 from pydantic import BaseModel, Field, field_validator
 
-from .review_styles import normalize_repo_full_name
-
 logger = logging.getLogger(__name__)
+
+
+def normalize_repo_full_name(raw: str) -> str:
+    """Normalize user input to ``owner/repo``."""
+    v = raw.strip()
+    v = v.strip("/")
+    if v.endswith(".git"):
+        v = v[:-4]
+    parts = [p for p in v.split("/") if p]
+    if len(parts) != 2:
+        raise ValueError("full_name must be owner/repo")
+    return f"{parts[0]}/{parts[1]}"
+
 
 AGENT_INSTRUCTIONS_NAMESPACE: list[str] = ["agent_instructions"]
 
 
 class AgentInstructionsCreate(BaseModel):
-    full_name: str = Field(..., description="GitHub repo in owner/name form")
+    full_name: str = Field(..., description="Repository in owner/name form")
 
     @field_validator("full_name", mode="before")
     @classmethod

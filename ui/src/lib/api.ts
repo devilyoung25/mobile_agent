@@ -360,12 +360,6 @@ export function loginUrl(redirectTo?: string): string {
   return `${API_BASE}/dashboard/api/entra/login${qs}`;
 }
 
-export function githubLoginUrl(redirectTo?: string): string {
-  const target = redirectTo ?? (typeof window !== "undefined" ? window.location.origin : "");
-  const qs = target ? `?redirect_to=${encodeURIComponent(target)}` : "";
-  return `${API_BASE}/dashboard/api/auth/login${qs}`;
-}
-
 export function slackConnectUrl(): string {
   return `${API_BASE}/dashboard/api/slack/login`;
 }

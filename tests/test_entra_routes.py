@@ -64,4 +64,3 @@ async def test_entra_callback_rejects_missing_pkce(monkeypatch) -> None:
         await routes.entra_callback(request, code="code", state=state)
 
     assert exc.value.status_code == 400
-

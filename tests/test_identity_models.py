@@ -1,8 +1,10 @@
-from agent.identity.models import github_user, user_from_actor_id
+from agent.identity.models import AuthenticatedUser, user_from_actor_id
 
 
-def test_github_user_builds_provider_neutral_metadata() -> None:
-    user = github_user("OctoCat", email="Octo@Example.COM")
+def test_authenticated_user_builds_provider_neutral_metadata() -> None:
+    user = AuthenticatedUser(
+        provider="github", subject_id="octocat", email="Octo@Example.COM", display_name="OctoCat"
+    )
 
     assert user.actor_id == "github:octocat"
     assert user.metadata() == {

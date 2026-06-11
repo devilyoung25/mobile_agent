@@ -27,7 +27,7 @@ async def test_stale_sandbox_creating_without_cached_backend_resets_and_creates(
             return_value=SANDBOX_CREATING,
         ),
         patch("agent.server.client.threads.get", new_callable=AsyncMock, return_value=thread),
-        patch("agent.server._create_sandbox_with_proxy", new_callable=AsyncMock) as create_sandbox,
+        patch("agent.server._create_sandbox_backend", new_callable=AsyncMock) as create_sandbox,
         patch("agent.server._configure_git_identity", new_callable=AsyncMock),
         patch("agent.server.client.threads.update", new_callable=AsyncMock) as update_thread,
     ):
@@ -81,9 +81,8 @@ async def test_fresh_sandbox_creating_waits_for_other_worker() -> None:
         patch("agent.server.client.threads.get", new_callable=AsyncMock, side_effect=threads),
         patch("agent.server.asyncio.sleep", new_callable=AsyncMock),
         patch("agent.server.create_sandbox", return_value=existing_backend) as connect_sandbox,
-        patch("agent.server._create_sandbox_with_proxy", new_callable=AsyncMock) as create_sandbox,
+        patch("agent.server._create_sandbox_backend", new_callable=AsyncMock) as create_sandbox,
         patch("agent.server.check_or_recreate_sandbox", side_effect=passthrough),
-        patch("agent.server._refresh_github_proxy_or_recreate", side_effect=passthrough),
         patch("agent.server._configure_git_identity", new_callable=AsyncMock),
         patch("agent.server.client.threads.update", new_callable=AsyncMock) as update_thread,
     ):

@@ -109,15 +109,11 @@ def _patch_new_thread_deps(monkeypatch, *, profile: dict[str, object]) -> None:
         assert role == "agent"
         return _VISION_MODEL, "medium"
 
-    async def fake_ensure_token(login: str) -> None:
-        return None
-
     async def fake_resolve_email(login: str, prof: dict[str, object]) -> str:
         return f"{login}@example.com"
 
     monkeypatch.setattr(thread_api, "get_profile", fake_profile)
     monkeypatch.setattr(thread_api, "get_team_default_model", fake_team_default)
-    monkeypatch.setattr(thread_api, "_ensure_dashboard_github_token", fake_ensure_token)
     monkeypatch.setattr(thread_api, "_resolve_run_email", fake_resolve_email)
 
 
@@ -151,13 +147,13 @@ async def test_enrich_run_start_command_creates_and_stamps_new_thread(monkeypatc
     stamped = created["metadata"]
     assert isinstance(stamped, dict)
     assert stamped["source"] == "dashboard"
-    assert stamped["github_login"] == "octocat"
+    assert stamped["owner_id"] == "octocat"
     assert stamped["title"] == "Fix the flaky test"
     assert stamped["repo_owner"] == "octo"
     assert stamped["repo_name"] == "repo"
 
     configurable = enriched["params"]["config"]["configurable"]
-    assert configurable["github_login"] == "octocat"
+    assert configurable["actor_id"] == "octocat"
     assert configurable["source"] == "dashboard"
     assert configurable["repo"] == {"owner": "octo", "name": "repo"}
     assert configurable["agent_model_id"] == _VISION_MODEL
@@ -291,7 +287,7 @@ async def test_proxy_commands_run_start_by_non_owner_is_rejected(monkeypatch) ->
         async def get(self, thread_id: str) -> dict[str, object]:
             return {
                 "thread_id": thread_id,
-                "metadata": {"source": "dashboard", "github_login": "owner"},
+                "metadata": {"source": "dashboard", "owner_id": "owner"},
             }
 
     class OwnedClient:
@@ -323,16 +319,12 @@ async def test_enrich_run_start_command_allowlists_client_configurable(monkeypat
         assert login == "octocat"
         return {}
 
-    async def fake_ensure_token(login: str) -> None:
-        assert login == "octocat"
-
     async def fake_resolve_email(login: str, profile: dict[str, object]) -> str:
         assert login == "octocat"
         return "octocat@example.com"
 
     monkeypatch.setattr(thread_api, "langgraph_client", lambda: FakeClient())
     monkeypatch.setattr(thread_api, "get_profile", fake_get_profile)
-    monkeypatch.setattr(thread_api, "_ensure_dashboard_github_token", fake_ensure_token)
     monkeypatch.setattr(thread_api, "_resolve_run_email", fake_resolve_email)
 
     command = {
@@ -357,14 +349,14 @@ async def test_enrich_run_start_command_allowlists_client_configurable(monkeypat
         command,
         metadata={
             "source": "dashboard",
-            "github_login": "octocat",
+            "owner_id": "octocat",
             "repo_owner": "octo",
             "repo_name": "repo",
         },
     )
 
     configurable = enriched["params"]["config"]["configurable"]
-    assert configurable["github_login"] == "octocat"
+    assert configurable["actor_id"] == "octocat"
     assert configurable["user_email"] == "octocat@example.com"
     assert configurable["source"] == "dashboard"
     assert configurable["repo"] == {"owner": "octo", "name": "repo"}
@@ -386,15 +378,11 @@ async def test_enrich_run_start_command_entra_sets_provider_neutral_configurable
     async def fake_get_profile(login: str) -> dict[str, object]:
         return {}
 
-    async def fail_ensure_token(login: str) -> None:
-        raise AssertionError("Entra runs must not resolve a GitHub token")
-
     async def fail_resolve_email(login: str, profile: dict[str, object]) -> str:
         raise AssertionError("Entra runs must use the session email, not GitHub mapping")
 
     monkeypatch.setattr(thread_api, "langgraph_client", lambda: FakeClient())
     monkeypatch.setattr(thread_api, "get_profile", fake_get_profile)
-    monkeypatch.setattr(thread_api, "_ensure_dashboard_github_token", fail_ensure_token)
     monkeypatch.setattr(thread_api, "_resolve_run_email", fail_resolve_email)
 
     command = {
@@ -406,7 +394,7 @@ async def test_enrich_run_start_command_entra_sets_provider_neutral_configurable
         "tid",
         "entra:user-oid",
         command,
-        metadata={"source": "dashboard", "github_login": "entra:user-oid"},
+        metadata={"source": "dashboard", "owner_id": "entra:user-oid"},
         auth_provider="entra",
         actor_id="entra:user-oid",
         email="dev@example.com",
@@ -425,7 +413,7 @@ async def test_proxy_commands_rejects_non_object_body(monkeypatch) -> None:
             assert thread_id == "tid"
             return {
                 "thread_id": "tid",
-                "metadata": {"source": "dashboard", "github_login": "octocat"},
+                "metadata": {"source": "dashboard", "owner_id": "octocat"},
             }
 
     class FakeClient:
@@ -445,7 +433,7 @@ async def test_proxy_endpoints_enforce_thread_ownership(monkeypatch) -> None:
             assert thread_id == "tid"
             return {
                 "thread_id": "tid",
-                "metadata": {"source": "dashboard", "github_login": "owner"},
+                "metadata": {"source": "dashboard", "owner_id": "owner"},
             }
 
     class FakeClient:
@@ -480,7 +468,7 @@ async def test_send_dashboard_message_returns_502_when_activity_unknown(monkeypa
             assert thread_id == "tid"
             return {
                 "thread_id": "tid",
-                "metadata": {"source": "dashboard", "github_login": "octocat"},
+                "metadata": {"source": "dashboard", "owner_id": "octocat"},
             }
 
     class FakeClient:

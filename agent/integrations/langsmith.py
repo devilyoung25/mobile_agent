@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import logging
 import os
-import time
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeout
 from typing import Any
 
-import httpx
 from deepagents.backends import LangSmithSandbox
 from deepagents.backends.protocol import ExecuteResponse, SandboxBackendProtocol
 from langsmith.sandbox import (
@@ -87,110 +84,8 @@ def _get_sandbox_snapshot_config() -> tuple[str | None, int, int, int, int, int]
     )
 
 
-def _github_proxy_rules(github_token: str) -> list[dict[str, Any]]:
-    basic_auth = base64.b64encode(f"x-access-token:{github_token}".encode()).decode()
-    return [
-        {
-            "name": "github-api",
-            "match_hosts": ["api.github.com"],
-            "headers": [
-                {
-                    "name": "Authorization",
-                    "type": "opaque",
-                    "value": f"Bearer {github_token}",
-                }
-            ],
-        },
-        {
-            "name": "github",
-            "match_hosts": ["github.com", "*.github.com"],
-            "headers": [
-                {
-                    "name": "Authorization",
-                    "type": "opaque",
-                    "value": f"Basic {basic_auth}",
-                }
-            ],
-        },
-    ]
-
-
-def _retry_after_seconds(response: httpx.Response | None) -> float | None:
-    if response is None:
-        return None
-    raw = response.headers.get("Retry-After")
-    if not raw:
-        return None
-    try:
-        delay = float(raw)
-    except ValueError:
-        return None
-    return max(delay, 0.0)
-
-
-def _is_retryable_proxy_config_error(exc: BaseException) -> bool:
-    if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response.status_code in PROXY_CONFIG_RETRYABLE_STATUS_CODES
-    return isinstance(exc, httpx.TransportError)
-
-
-def _configure_github_proxy(sandbox_name: str, github_token: str) -> None:
-    """Configure sandbox proxy to inject GitHub auth for GitHub traffic.
-
-    Uses the LangSmith proxy-config API to set up header injection so that
-    git operations (clone, pull, push) authenticate via the proxy rather than
-    writing credentials to disk in the sandbox.
-
-    Args:
-        sandbox_name: The sandbox name/ID returned by the LangSmith API.
-        github_token: GitHub token to inject as Authorization header.
-    """
-    api_key = _get_langsmith_api_key()
-    if not api_key:
-        logger.warning("No LangSmith API key found, skipping GitHub proxy configuration")
-        return
-    langsmith_endpoint = os.environ.get("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com")
-    url = f"{langsmith_endpoint}/v2/sandboxes/boxes/{sandbox_name}"
-    payload = {"proxy_config": {"rules": _github_proxy_rules(github_token)}}
-    with httpx.Client(timeout=PROXY_CONFIG_TIMEOUT_SECONDS) as client:
-        for attempt in range(PROXY_CONFIG_MAX_ATTEMPTS):
-            try:
-                response = client.patch(
-                    url,
-                    json=payload,
-                    headers={"X-API-Key": api_key},
-                )
-                response.raise_for_status()
-                break
-            except Exception as exc:
-                if attempt == PROXY_CONFIG_MAX_ATTEMPTS - 1 or not _is_retryable_proxy_config_error(
-                    exc
-                ):
-                    raise
-                retry_after = (
-                    _retry_after_seconds(exc.response)
-                    if isinstance(exc, httpx.HTTPStatusError)
-                    else None
-                )
-                delay = (
-                    retry_after
-                    or PROXY_CONFIG_RETRY_DELAYS_SECONDS[
-                        min(attempt, len(PROXY_CONFIG_RETRY_DELAYS_SECONDS) - 1)
-                    ]
-                )
-                logger.warning(
-                    "Failed to configure GitHub proxy for sandbox %s (%s); retrying in %.1fs",
-                    sandbox_name,
-                    type(exc).__name__,
-                    delay,
-                )
-                time.sleep(delay)
-    logger.info("Configured GitHub proxy for sandbox %s", sandbox_name)
-
-
 def create_langsmith_sandbox(
     sandbox_id: str | None = None,
-    github_token: str | None = None,
 ) -> SandboxBackendProtocol:
     """Create or connect to a LangSmith sandbox without automatic cleanup.
 
@@ -201,8 +96,6 @@ def create_langsmith_sandbox(
     Args:
         sandbox_id: Optional existing sandbox ID to connect to.
                    If None, creates a new sandbox.
-        github_token: Optional GitHub token. Used to configure proxy auth on
-                      new sandboxes. Ignored when connecting to an existing sandbox.
 
     Returns:
         SandboxBackendProtocol instance
@@ -228,9 +121,6 @@ def create_langsmith_sandbox(
         delete_after_stop_seconds=delete_after_stop_seconds,
     )
     _update_thread_sandbox_metadata(backend.id)
-
-    if sandbox_id is None and github_token:
-        _configure_github_proxy(backend.id, github_token)
 
     return backend
 

@@ -59,4 +59,3 @@ def build_chat_model(
         max_tokens=max_tokens,
     )
     return model_factory(model_id, **model_kwargs)
-

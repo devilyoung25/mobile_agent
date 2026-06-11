@@ -44,4 +44,3 @@ async def upsert_auth_tokens(
     if isinstance(refresh_token, str) and refresh_token:
         value["encrypted_refresh_token"] = encrypt_token(refresh_token)
     await get_client().store.put_item(AUTH_TOKENS_NAMESPACE, actor_id, value)
-

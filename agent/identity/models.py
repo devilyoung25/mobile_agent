@@ -35,17 +35,8 @@ class AuthenticatedUser:
         return value
 
 
-def github_user(login: str, *, email: str | None = None) -> AuthenticatedUser:
-    return AuthenticatedUser(
-        provider="github",
-        subject_id=login.strip().lower(),
-        email=email,
-        display_name=login.strip() or None,
-    )
-
-
 def user_from_actor_id(actor_id: str, *, email: str | None = None) -> AuthenticatedUser:
     provider, sep, subject_id = actor_id.strip().partition(":")
     if not sep or not provider or not subject_id:
-        return github_user(actor_id, email=email)
+        return AuthenticatedUser(provider="local", subject_id=actor_id.strip(), email=email)
     return AuthenticatedUser(provider=provider, subject_id=subject_id, email=email)

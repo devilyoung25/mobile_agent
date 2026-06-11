@@ -242,8 +242,7 @@ def http_request(
 ) -> dict[str, Any]:
     """Make HTTP requests to APIs and web services.
 
-    Do not use this tool for GitHub API calls. Use `GH_TOKEN=dummy gh` in the
-    sandbox so GitHub authentication is handled by the sandbox proxy.
+    Use this for API calls that need custom headers, methods, params, or bodies.
 
     Args:
         url: Target URL

@@ -44,10 +44,6 @@ async def _active_thread(thread_id: str) -> bool:
     return True
 
 
-async def _noop_token_check(login: str) -> None:
-    return None
-
-
 async def _empty_profile(login: str) -> dict[str, Any]:
     return {}
 
@@ -57,45 +53,12 @@ async def _run_email(login: str, profile: dict[str, Any]) -> str:
 
 
 @pytest.mark.asyncio
-async def test_dashboard_followup_on_slack_thread_uses_dashboard_source(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    metadata = {
-        "source": "slack",
-        "github_login": "octocat",
-        "triggering_user_email": "octocat@example.com",
-        "repo_owner": "octo",
-        "repo_name": "repo",
-        "source_context": {
-            "slack_thread": {"channel_id": "C1", "thread_ts": "123.45"},
-        },
-    }
-    client = _FakeClient(metadata)
-
-    monkeypatch.setattr(thread_api, "langgraph_client", lambda: client)
-    monkeypatch.setattr(thread_api, "get_thread_active_status", _inactive_thread)
-    monkeypatch.setattr(thread_api, "_ensure_dashboard_github_token", _noop_token_check)
-    monkeypatch.setattr(thread_api, "get_profile", _empty_profile)
-    monkeypatch.setattr(thread_api, "_resolve_run_email", _run_email)
-
-    with pytest.raises(HTTPException) as exc_info:
-        await thread_api.send_dashboard_message(
-            "thread-1",
-            "octocat",
-            thread_api.ThreadMessageBody(content="continue in web"),
-            email="octocat@example.com",
-        )
-
-    assert exc_info.value.status_code == 409
-
-
-@pytest.mark.asyncio
 async def test_dashboard_followup_sends_image_content_blocks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     metadata = {
         "source": "dashboard",
-        "github_login": "octocat",
+        "owner_id": "octocat",
         "repo_owner": "octo",
         "repo_name": "repo",
     }
@@ -103,7 +66,6 @@ async def test_dashboard_followup_sends_image_content_blocks(
 
     monkeypatch.setattr(thread_api, "langgraph_client", lambda: client)
     monkeypatch.setattr(thread_api, "get_thread_active_status", _inactive_thread)
-    monkeypatch.setattr(thread_api, "_ensure_dashboard_github_token", _noop_token_check)
     monkeypatch.setattr(thread_api, "get_profile", _empty_profile)
     monkeypatch.setattr(thread_api, "_resolve_run_email", _run_email)
     monkeypatch.setattr(
@@ -132,43 +94,12 @@ async def test_dashboard_followup_sends_image_content_blocks(
 
 
 @pytest.mark.asyncio
-async def test_dashboard_followup_on_busy_thread_queues_dashboard_handoff(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    metadata = {
-        "source": "slack",
-        "github_login": "octocat",
-        "triggering_user_email": "octocat@example.com",
-    }
-    client = _FakeClient(metadata)
-    queued_messages: list[object] = []
-
-    async def fake_queue_message_for_thread(thread_id: str, message_content: object) -> bool:
-        queued_messages.append(message_content)
-        return True
-
-    monkeypatch.setattr(thread_api, "langgraph_client", lambda: client)
-    monkeypatch.setattr(thread_api, "get_thread_active_status", _active_thread)
-    monkeypatch.setattr(thread_api, "queue_message_for_thread", fake_queue_message_for_thread)
-
-    await thread_api.send_dashboard_message(
-        "thread-1",
-        "octocat",
-        thread_api.ThreadMessageBody(content="continue in web"),
-        email="octocat@example.com",
-    )
-
-    assert client.threads.updates[0]["source"] == "dashboard"
-    assert queued_messages == [{"text": "continue in web", "source": "dashboard"}]
-
-
-@pytest.mark.asyncio
 async def test_dashboard_followup_on_busy_thread_queues_images(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     metadata = {
         "source": "dashboard",
-        "github_login": "octocat",
+        "owner_id": "octocat",
         "resolved_model": "openai:gpt-5.5",
     }
     client = _FakeClient(metadata)
@@ -211,7 +142,7 @@ async def test_dashboard_followup_on_busy_text_only_thread_rejects_images(
 ) -> None:
     metadata = {
         "source": "dashboard",
-        "github_login": "octocat",
+        "owner_id": "octocat",
         "resolved_model": "fireworks:accounts/fireworks/models/deepseek-v4-pro",
     }
     client = _FakeClient(metadata)
@@ -249,7 +180,7 @@ async def test_dashboard_followup_on_busy_unknown_model_rejects_images(
 ) -> None:
     metadata = {
         "source": "dashboard",
-        "github_login": "octocat",
+        "owner_id": "octocat",
     }
     client = _FakeClient(metadata)
 
@@ -277,14 +208,13 @@ async def test_dashboard_followup_preserves_explicit_repo_less_thread(
 ) -> None:
     metadata = {
         "source": "dashboard",
-        "github_login": "octocat",
+        "owner_id": "octocat",
         "repo_explicitly_none": True,
     }
     client = _FakeClient(metadata)
 
     monkeypatch.setattr(thread_api, "langgraph_client", lambda: client)
     monkeypatch.setattr(thread_api, "get_thread_active_status", _inactive_thread)
-    monkeypatch.setattr(thread_api, "_ensure_dashboard_github_token", _noop_token_check)
     monkeypatch.setattr(thread_api, "get_profile", _empty_profile)
     monkeypatch.setattr(thread_api, "_resolve_run_email", _run_email)
 
@@ -304,13 +234,12 @@ async def test_dashboard_followup_without_repo_metadata_allows_team_default(
 ) -> None:
     metadata = {
         "source": "dashboard",
-        "github_login": "octocat",
+        "owner_id": "octocat",
     }
     client = _FakeClient(metadata)
 
     monkeypatch.setattr(thread_api, "langgraph_client", lambda: client)
     monkeypatch.setattr(thread_api, "get_thread_active_status", _inactive_thread)
-    monkeypatch.setattr(thread_api, "_ensure_dashboard_github_token", _noop_token_check)
     monkeypatch.setattr(thread_api, "get_profile", _empty_profile)
     monkeypatch.setattr(thread_api, "_resolve_run_email", _run_email)
 

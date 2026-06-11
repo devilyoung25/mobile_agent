@@ -2,7 +2,7 @@
 
 A single record keyed ``"default"`` keeps all instance-wide reviewer
 configuration in one place. Per-repo style prompts live in
-:mod:`agent.dashboard.review_styles`.
+the dashboard settings modules.
 """
 
 from __future__ import annotations
@@ -243,7 +243,7 @@ async def get_team_default_model_pair(
 
 
 async def get_team_review_trace_links_enabled() -> bool:
-    """Return whether GitHub review bodies should include a LangSmith trace link."""
+    """Return whether review bodies should include a LangSmith trace link."""
     settings = await get_team_settings()
     return bool(settings.get("review_trace_links", True))
 

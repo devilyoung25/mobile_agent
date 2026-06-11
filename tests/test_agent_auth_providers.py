@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from langgraph.graph.state import RunnableConfig
 
-from agent.server import get_agent, open_pull_request, request_pr_review
+from agent.server import get_agent
 
 
 class _DummyAgent:
@@ -13,7 +13,7 @@ class _DummyAgent:
 
 
 @pytest.mark.asyncio
-async def test_entra_agent_run_skips_github_token_and_proxy() -> None:
+async def test_engine_run_uses_actor_identity_and_azure_devops_tools() -> None:
     config: RunnableConfig = {
         "configurable": {
             "__is_for_execution__": True,
@@ -27,10 +27,9 @@ async def test_entra_agent_run_skips_github_token_and_proxy() -> None:
     }
     main_model = MagicMock(name="main_model")
     subagent_model = MagicMock(name="subagent_model")
+    ado_tool = MagicMock(name="ado_tool")
 
     with (
-        patch("agent.server.resolve_github_token", new_callable=AsyncMock) as resolve_token,
-        patch("agent.server.resolve_triggering_user_identity", return_value=None),
         patch(
             "agent.server.ensure_sandbox_for_thread",
             new_callable=AsyncMock,
@@ -47,19 +46,28 @@ async def test_entra_agent_run_skips_github_token_and_proxy() -> None:
             return_value=(("openai:gpt-5.5", "medium"), ("openai:gpt-5.5", "low")),
         ),
         patch("agent.server.load_profile", new_callable=AsyncMock, return_value={}) as load_profile,
+        patch("agent.server.client") as fake_client,
+        patch("agent.server.record_agent_thread_usage", new_callable=AsyncMock) as record_usage,
         patch("agent.server.fallback_model_id_for", return_value=None),
         patch("agent.server.make_model", side_effect=[main_model, subagent_model]),
         patch("agent.server.construct_system_prompt", return_value="prompt") as prompt,
-        patch("agent.server.load_azure_devops_read_only_tools", new_callable=AsyncMock) as ado_tools,
+        patch(
+            "agent.server.load_azure_devops_read_only_tools",
+            new_callable=AsyncMock,
+            return_value=[ado_tool],
+        ) as ado_tools,
         patch("agent.server.create_deep_agent", return_value=_DummyAgent()) as create_agent,
     ):
+        fake_client.threads.update = AsyncMock()
         await get_agent(config)
 
-    resolve_token.assert_not_awaited()
-    ensure_sandbox.assert_awaited_once_with("thread-123", configure_github_proxy=False)
+    ensure_sandbox.assert_awaited_once_with("thread-123")
     load_profile.assert_awaited_once_with("entra:user-oid")
-    ado_tools.assert_awaited_once_with(auth_provider="entra")
+    ado_tools.assert_awaited_once_with()
+    assert record_usage.await_args.kwargs["actor_id"] == "entra:user-oid"
     assert prompt.call_args.kwargs["code_host"] == "azure_devops"
     loaded_tools = create_agent.call_args.kwargs["tools"]
-    assert open_pull_request not in loaded_tools
-    assert request_pr_review not in loaded_tools
+    assert ado_tool in loaded_tools
+    tool_names = {getattr(t, "__name__", getattr(t, "name", "")) for t in loaded_tools}
+    assert "open_pull_request" not in tool_names
+    assert "request_pr_review" not in tool_names

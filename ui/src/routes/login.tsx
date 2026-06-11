@@ -4,7 +4,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { OnOffBrand } from "@/components/OnOffBrand";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { githubLoginUrl, loginUrl } from "@/lib/api";
+import { loginUrl } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
@@ -31,20 +31,11 @@ function Login() {
         <CardHeader>
           <OnOffBrand className="mb-5" showMobileCue />
           <CardTitle>Sign in to ON Mobile Agent</CardTitle>
-          <CardDescription>
-            Use your corporate Microsoft account. GitHub sign-in remains available for legacy
-            review and integration flows.
-          </CardDescription>
+          <CardDescription>Use your corporate Microsoft account.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <a href={loginUrl()} className={cn(buttonVariants({ size: "lg" }), "w-full")}>
             Continue with Microsoft
-          </a>
-          <a
-            href={githubLoginUrl()}
-            className={cn(buttonVariants({ variant: "ghost" }), "w-full")}
-          >
-            Continue with GitHub legacy
           </a>
         </CardContent>
       </Card>
