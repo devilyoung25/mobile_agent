@@ -6,12 +6,11 @@ from deepagents.backends.protocol import ExecuteResponse, SandboxBackendProtocol
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langsmith.sandbox import SandboxClientError
-
-from agent.middleware.sandbox_circuit_breaker import (
+from on_core.middleware.sandbox_circuit_breaker import (
     SandboxCircuitBreakerMiddleware,
 )
-from agent.middleware.tool_error_handler import ToolErrorMiddleware
-from agent.utils.sandbox_state import SANDBOX_BACKENDS, clear_sandbox_backend, set_sandbox_backend
+from on_core.middleware.tool_error_handler import ToolErrorMiddleware
+from on_core.sandbox_state import SANDBOX_BACKENDS, clear_sandbox_backend, set_sandbox_backend
 
 
 class FakeSandboxBackend(SandboxBackendProtocol):

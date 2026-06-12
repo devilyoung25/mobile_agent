@@ -56,3 +56,10 @@ def validate_sandbox_startup_config() -> None:
         from agent.integrations.langsmith import LangSmithProvider
 
         LangSmithProvider.validate_startup_config()
+
+
+# Register this factory with the engine core so reconnects work without the
+# core depending on provider integrations.
+from on_core.sandbox_state import set_sandbox_factory as _register  # noqa: E402
+
+_register(create_sandbox)

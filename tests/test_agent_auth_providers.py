@@ -56,7 +56,7 @@ async def test_engine_run_uses_actor_identity_and_azure_devops_tools() -> None:
             new_callable=AsyncMock,
             return_value=[ado_tool],
         ) as ado_tools,
-        patch("agent.server.create_deep_agent", return_value=_DummyAgent()) as create_agent,
+        patch("agent.server.build_engine", return_value=_DummyAgent()) as build_engine,
     ):
         fake_client.threads.update = AsyncMock()
         await get_agent(config)
@@ -66,7 +66,7 @@ async def test_engine_run_uses_actor_identity_and_azure_devops_tools() -> None:
     ado_tools.assert_awaited_once_with()
     assert record_usage.await_args.kwargs["actor_id"] == "entra:user-oid"
     assert prompt.call_args.kwargs["code_host"] == "azure_devops"
-    loaded_tools = create_agent.call_args.kwargs["tools"]
+    loaded_tools = build_engine.call_args.kwargs["tools"]
     assert ado_tool in loaded_tools
     tool_names = {getattr(t, "__name__", getattr(t, "name", "")) for t in loaded_tools}
     assert "open_pull_request" not in tool_names

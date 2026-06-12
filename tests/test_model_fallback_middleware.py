@@ -9,8 +9,7 @@ import httpx
 import openai
 import pytest
 from langchain_core.messages import AIMessage
-
-from agent.middleware.model_fallback import (
+from on_core.middleware.model_fallback import (
     ModelFallbackMiddleware,
     _should_fallback,
 )

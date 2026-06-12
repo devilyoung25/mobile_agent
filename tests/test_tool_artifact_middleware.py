@@ -7,8 +7,8 @@ from typing import Any
 
 import pytest
 from langchain_core.messages import ToolMessage
+from on_core.middleware.tool_artifact import ToolArtifactMiddleware
 
-from agent.middleware.tool_artifact import ToolArtifactMiddleware
 from agent.utils import sandbox_state
 
 

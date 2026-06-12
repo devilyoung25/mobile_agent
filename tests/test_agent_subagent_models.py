@@ -26,7 +26,7 @@ async def test_agent_uses_profile_subagent_model_override() -> None:
     subagent_model = MagicMock(name="subagent_model")
     captured: dict[str, object] = {}
 
-    def fake_create_deep_agent(**kwargs: object) -> _DummyAgent:
+    def fake_build_engine(**kwargs: object) -> _DummyAgent:
         captured.update(kwargs)
         return _DummyAgent()
 
@@ -60,15 +60,12 @@ async def test_agent_uses_profile_subagent_model_override() -> None:
         patch("agent.server.fallback_model_id_for", return_value=None),
         patch("agent.server.make_model", side_effect=[main_model, subagent_model]) as make_model,
         patch("agent.server.construct_system_prompt", return_value="prompt"),
-        patch("agent.server.create_deep_agent", side_effect=fake_create_deep_agent),
+        patch("agent.server.build_engine", side_effect=fake_build_engine),
     ):
         await get_agent(config)
 
     assert captured["model"] is main_model
-    subagents = captured["subagents"]
-    assert isinstance(subagents, list)
-    assert subagents[0]["name"] == "general-purpose"
-    assert subagents[0]["model"] is subagent_model
+    assert captured["subagent_model"] is subagent_model
 
     main_call = make_model.call_args_list[0]
     assert main_call.args == ("anthropic:claude-opus-4-8",)
@@ -94,7 +91,7 @@ async def test_agent_subagent_inherits_profile_model_override_without_explicit_p
     subagent_model = MagicMock(name="subagent_model")
     captured: dict[str, object] = {}
 
-    def fake_create_deep_agent(**kwargs: object) -> _DummyAgent:
+    def fake_build_engine(**kwargs: object) -> _DummyAgent:
         captured.update(kwargs)
         return _DummyAgent()
 
@@ -126,13 +123,11 @@ async def test_agent_subagent_inherits_profile_model_override_without_explicit_p
         patch("agent.server.fallback_model_id_for", return_value=None),
         patch("agent.server.make_model", side_effect=[main_model, subagent_model]) as make_model,
         patch("agent.server.construct_system_prompt", return_value="prompt"),
-        patch("agent.server.create_deep_agent", side_effect=fake_create_deep_agent),
+        patch("agent.server.build_engine", side_effect=fake_build_engine),
     ):
         await get_agent(config)
 
-    subagents = captured["subagents"]
-    assert isinstance(subagents, list)
-    assert subagents[0]["model"] is subagent_model
+    assert captured["subagent_model"] is subagent_model
     assert make_model.call_args_list[0].args == ("anthropic:claude-opus-4-8",)
     assert make_model.call_args_list[1].args == ("anthropic:claude-opus-4-8",)
     assert make_model.call_args_list[1].kwargs["thinking"] == {

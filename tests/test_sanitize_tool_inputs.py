@@ -7,7 +7,7 @@ ValidationError and an unnecessary retry.
 
 from __future__ import annotations
 
-from agent.middleware.sanitize_tool_inputs import _coerce_int, _sanitize_read_file_args
+from on_core.middleware.sanitize_tool_inputs import _coerce_int, _sanitize_read_file_args
 
 
 class TestCoerceInt:

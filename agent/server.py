@@ -23,10 +23,8 @@ warnings.filterwarnings("ignore", message=".*Pydantic V1.*", category=UserWarnin
 
 from deepagents import create_deep_agent
 from deepagents.backends.protocol import SandboxBackendProtocol
-from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT, SubAgent
-from langchain.agents.middleware import ModelCallLimitMiddleware
-from langchain_core.language_models import BaseChatModel
 from langsmith.sandbox import SandboxClientError
+from on_core import DEFAULT_RECURSION_LIMIT, MODEL_CALL_RECURSION_LIMIT, build_engine
 
 from .dashboard.admin import is_observability_authorized
 from .dashboard.agent_overrides import (
@@ -41,15 +39,6 @@ from .dashboard.team_settings import get_team_default_model_pair, get_team_defau
 from .integrations.azure_devops_mcp import load_azure_devops_read_only_tools
 from .integrations.datadog_mcp import load_datadog_tools
 from .integrations.langsmith_tools import load_langsmith_tools
-from .middleware import (
-    ModelFallbackMiddleware,
-    SandboxCircuitBreakerMiddleware,
-    SanitizeThinkingBlocksMiddleware,
-    SanitizeToolInputsMiddleware,
-    ToolArtifactMiddleware,
-    ToolErrorMiddleware,
-    ensure_no_empty_msg,
-)
 from .prompt import construct_system_prompt
 from .tools import (
     fetch_url,
@@ -287,17 +276,6 @@ async def ensure_sandbox_for_thread(thread_id: str) -> SandboxBackendProtocol:
 
 
 DEFAULT_LLM_MAX_TOKENS = 64_000
-DEFAULT_RECURSION_LIMIT = 9_999
-MODEL_CALL_RECURSION_LIMIT = 5_000  # ~half the recursion limit to account for tool calls
-
-
-def _general_purpose_subagent(model: BaseChatModel) -> SubAgent:
-    return {
-        "name": GENERAL_PURPOSE_SUBAGENT["name"],
-        "description": GENERAL_PURPOSE_SUBAGENT["description"],
-        "system_prompt": GENERAL_PURPOSE_SUBAGENT["system_prompt"],
-        "model": model,
-    }
 
 
 def _get_cached_sandbox_backend(thread_id: str) -> SandboxBackendProtocol:
@@ -429,14 +407,12 @@ async def get_agent(config: RunnableConfig) -> Pregel:
     )
 
     fallback_model_id = os.environ.get("LLM_FALLBACK_MODEL_ID") or fallback_model_id_for(model_id)
-    fallback_middleware: list[Any] = []
+    fallback_model = None
     if fallback_model_id and fallback_model_id != model_id:
         fallback_kwargs: ModelKwargs = {"max_tokens": DEFAULT_LLM_MAX_TOKENS}
         if fallback_model_id.startswith("openai:"):
             fallback_kwargs["reasoning"] = DEFAULT_LLM_REASONING
-        fallback_middleware.append(
-            ModelFallbackMiddleware(make_model(fallback_model_id, **fallback_kwargs))
-        )
+        fallback_model = make_model(fallback_model_id, **fallback_kwargs)
         logger.info("Configured model fallback %s -> %s", model_id, fallback_model_id)
 
     source = (
@@ -477,8 +453,9 @@ async def get_agent(config: RunnableConfig) -> Pregel:
     logger.info("Returning agent with sandbox for thread %s", thread_id)
     main_model = make_model(model_id, **model_kwargs)
     subagent_model = make_model(subagent_model_id, **subagent_model_kwargs)
-    return create_deep_agent(
+    return build_engine(
         model=main_model,
+        subagent_model=subagent_model,
         system_prompt=construct_system_prompt(
             working_dir=work_dir,
             triggering_user_identity=triggering_user_identity,
@@ -493,16 +470,7 @@ async def get_agent(config: RunnableConfig) -> Pregel:
             *azure_devops_tools,
             *observability_tools,
         ],
-        subagents=[_general_purpose_subagent(subagent_model)],
         backend=backend_factory,
-        middleware=[
-            SanitizeToolInputsMiddleware(),
-            ModelCallLimitMiddleware(run_limit=MODEL_CALL_RECURSION_LIMIT, exit_behavior="end"),
-            ToolErrorMiddleware(),
-            ToolArtifactMiddleware(),
-            ensure_no_empty_msg,
-            SandboxCircuitBreakerMiddleware(),
-            *fallback_middleware,
-            SanitizeThinkingBlocksMiddleware(),
-        ],
+        fallback_model=fallback_model,
+        run_limit=MODEL_CALL_RECURSION_LIMIT,
     ).with_config(config)

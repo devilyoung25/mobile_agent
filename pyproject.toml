@@ -10,6 +10,7 @@ dependencies = [
     "on-mcp-toolset",
     "on-integration-azure-devops",
     "on-identity-entra",
+    "on-core",
     "deepagents==0.6.8",
     "fastapi>=0.136.3",
     "uvicorn>=0.48.0",
@@ -51,6 +52,7 @@ on-model-launcher = { workspace = true }
 on-mcp-toolset = { workspace = true }
 on-integration-azure-devops = { workspace = true }
 on-identity-entra = { workspace = true }
+on-core = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

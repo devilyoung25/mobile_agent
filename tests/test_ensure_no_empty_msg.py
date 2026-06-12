@@ -1,8 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-
-from agent.middleware.ensure_no_empty_msg import (
+from on_core.middleware.ensure_no_empty_msg import (
     DASHBOARD_HANDOFF_MARKER,
     check_if_confirming_completion,
     ensure_no_empty_msg,
@@ -129,7 +128,7 @@ class TestEnsureNoEmptyMsgNotify:
         }
 
         with patch(
-            "agent.middleware.ensure_no_empty_msg.get_config",
+            "on_core.middleware.ensure_no_empty_msg.get_config",
             return_value={"configurable": {"source": "dashboard"}},
         ):
             result = ensure_no_empty_msg.after_model(state, self._make_runtime())
@@ -152,7 +151,7 @@ class TestEnsureNoEmptyMsgNotify:
         }
 
         with patch(
-            "agent.middleware.ensure_no_empty_msg.get_config",
+            "on_core.middleware.ensure_no_empty_msg.get_config",
             return_value={"configurable": {"source": "automation"}},
         ):
             result = ensure_no_empty_msg.after_model(state, self._make_runtime())
