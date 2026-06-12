@@ -52,7 +52,7 @@ async def test_engine_run_uses_actor_identity_and_azure_devops_tools() -> None:
         patch("agent.server.make_model", side_effect=[main_model, subagent_model]),
         patch("agent.server.construct_system_prompt", return_value="prompt") as prompt,
         patch(
-            "agent.server.load_azure_devops_read_only_tools",
+            "agent.server.load_azure_devops_tools_for_actor",
             new_callable=AsyncMock,
             return_value=[ado_tool],
         ) as ado_tools,
@@ -63,7 +63,7 @@ async def test_engine_run_uses_actor_identity_and_azure_devops_tools() -> None:
 
     ensure_sandbox.assert_awaited_once_with("thread-123")
     load_profile.assert_awaited_once_with("entra:user-oid")
-    ado_tools.assert_awaited_once_with()
+    ado_tools.assert_awaited_once_with("entra:user-oid")
     assert record_usage.await_args.kwargs["actor_id"] == "entra:user-oid"
     assert prompt.call_args.kwargs["code_host"] == "azure_devops"
     loaded_tools = build_engine.call_args.kwargs["tools"]

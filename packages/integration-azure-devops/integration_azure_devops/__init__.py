@@ -81,27 +81,35 @@ def _local_server_config(org: str) -> dict[str, Any]:
     return config
 
 
-def _remote_server_config(org: str) -> dict[str, Any]:
+def _remote_server_config(org: str, headers: dict[str, str] | None = None) -> dict[str, Any]:
     url = os.environ.get("AZURE_DEVOPS_MCP_URL", "").strip() or f"https://mcp.dev.azure.com/{org}"
-    return {
+    config: dict[str, Any] = {
         "transport": "streamable_http",
         "url": url,
         "timeout": timedelta(seconds=_MCP_TIMEOUT_SECONDS),
     }
+    if headers:
+        config["headers"] = headers
+    return config
 
 
-def _server_config() -> dict[str, Any] | None:
+def _server_config(headers: dict[str, str] | None = None) -> dict[str, Any] | None:
     org = _organization()
     if not org:
         return None
     if _transport() == "stdio":
         return _local_server_config(org)
-    return _remote_server_config(org)
+    return _remote_server_config(org, headers)
 
 
-def azure_devops_provider() -> McpToolsetProvider | None:
-    """The Azure DevOps read-only toolset, or ``None`` when not configured."""
-    config = _server_config()
+def azure_devops_provider(*, bearer_token: str | None = None) -> McpToolsetProvider | None:
+    """The Azure DevOps read-only toolset, or ``None`` when not configured.
+
+    ``bearer_token`` authenticates the remote (streamable_http) endpoint; the
+    stdio transport authenticates via the local server's own flags instead.
+    """
+    headers = {"Authorization": f"Bearer {bearer_token}"} if bearer_token else None
+    config = _server_config(headers)
     if config is None:
         return None
     return McpToolsetProvider(
@@ -118,11 +126,11 @@ def is_azure_devops_read_only_tool(name: str) -> bool:
     return READ_ONLY_POLICY.allows(name)
 
 
-async def load_azure_devops_read_only_tools() -> list[Any]:
+async def load_azure_devops_read_only_tools(*, bearer_token: str | None = None) -> list[Any]:
     """Load read-only Azure DevOps MCP tools when an organization is configured."""
     import logging
 
-    provider = azure_devops_provider()
+    provider = azure_devops_provider(bearer_token=bearer_token)
     if provider is None:
         logging.getLogger(__name__).info(
             "Azure DevOps MCP disabled: AZURE_DEVOPS_MCP_ORG is not configured"

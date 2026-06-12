@@ -36,7 +36,7 @@ from .dashboard.agent_overrides import (
 from .dashboard.agent_usage import record_agent_thread_usage
 from .dashboard.options import is_supported_model, model_supports_effort
 from .dashboard.team_settings import get_team_default_model_pair, get_team_default_repo
-from .integrations.azure_devops_mcp import load_azure_devops_read_only_tools
+from .integrations.azure_devops_mcp import load_azure_devops_tools_for_actor
 from .integrations.datadog_mcp import load_datadog_tools
 from .integrations.langsmith_tools import load_langsmith_tools
 from .prompt import construct_system_prompt
@@ -446,7 +446,7 @@ async def get_agent(config: RunnableConfig) -> Pregel:
 
     observability_authorized = _observability_authorized(config)
     azure_devops_tools, observability_tools = await asyncio.gather(
-        load_azure_devops_read_only_tools(),
+        load_azure_devops_tools_for_actor(actor_id),
         _load_observability_tools(observability_authorized),
     )
 
