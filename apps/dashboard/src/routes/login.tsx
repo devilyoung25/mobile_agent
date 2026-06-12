@@ -30,12 +30,12 @@ function Login() {
       <Card className="w-full max-w-md border-border bg-card">
         <CardHeader>
           <OnOffBrand className="mb-5" showMobileCue />
-          <CardTitle>Sign in to ON Mobile Agent</CardTitle>
-          <CardDescription>Use your corporate Microsoft account.</CardDescription>
+          <CardTitle>Inicia sesión en ON Mobile Agent</CardTitle>
+          <CardDescription>Usa tu cuenta corporativa de Microsoft.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <a href={loginUrl()} className={cn(buttonVariants({ size: "lg" }), "w-full")}>
-            Continue with Microsoft
+            Continuar con Microsoft
           </a>
         </CardContent>
       </Card>
