@@ -5,19 +5,19 @@ export interface CronPreset {
 }
 
 export const CRON_PRESETS: Array<CronPreset> = [
-  { id: "hourly", label: "Hourly", value: "0 * * * *" },
-  { id: "daily", label: "Daily", value: "0 9 * * *" },
-  { id: "weekly", label: "Weekly", value: "0 9 * * 1" },
+  { id: "hourly", label: "Cada hora", value: "0 * * * *" },
+  { id: "daily", label: "Diario", value: "0 9 * * *" },
+  { id: "weekly", label: "Semanal", value: "0 9 * * 1" },
 ]
 
 const DAY_NAMES = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
+  "domingo",
+  "lunes",
+  "martes",
+  "miércoles",
+  "jueves",
+  "viernes",
+  "sábado",
 ]
 
 function pad(n: number): string {
@@ -36,12 +36,12 @@ export function describeCron(expr: string): string {
   if (!min || !hour || !dom || !mon || !dow) return expr
 
   if (min === "0" && hour === "*" && dom === "*" && mon === "*" && dow === "*") {
-    return "Every hour"
+    return "Cada hora"
   }
 
   const everyNHours = hour.match(/^\*\/(\d+)$/)
   if (everyNHours && min === "0" && dom === "*" && mon === "*" && dow === "*") {
-    return `Every ${everyNHours[1]} hours`
+    return `Cada ${everyNHours[1]} horas`
   }
 
   const minNum = Number(min)
@@ -53,12 +53,12 @@ export function describeCron(expr: string): string {
     hourNum >= 0
 
   if (timeKnown && dom === "*" && mon === "*") {
-    if (dow === "*") return `Daily at ${formatTime(minNum, hourNum)}`
-    if (dow === "1-5") return `Weekdays at ${formatTime(minNum, hourNum)}`
+    if (dow === "*") return `Todos los días a las ${formatTime(minNum, hourNum)}`
+    if (dow === "1-5") return `Días laborables a las ${formatTime(minNum, hourNum)}`
     const dowNum = Number(dow)
     if (Number.isInteger(dowNum) && dowNum >= 0 && dowNum <= 7) {
       const name = DAY_NAMES[dowNum % 7]
-      return `Weekly on ${name} at ${formatTime(minNum, hourNum)}`
+      return `Cada ${name} a las ${formatTime(minNum, hourNum)}`
     }
   }
 

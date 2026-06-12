@@ -15,9 +15,9 @@ import { useTheme, type Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 const THEME_OPTIONS: Array<{ value: Theme; label: string; icon: typeof IoSunnyOutline }> = [
-  { value: "light", label: "Light", icon: IoSunnyOutline },
-  { value: "dark", label: "Dark", icon: IoMoonOutline },
-  { value: "system", label: "System", icon: IoDesktopOutline },
+  { value: "light", label: "Claro", icon: IoSunnyOutline },
+  { value: "dark", label: "Oscuro", icon: IoMoonOutline },
+  { value: "system", label: "Sistema", icon: IoDesktopOutline },
 ];
 
 interface SidebarUserMenuProps {
@@ -84,7 +84,7 @@ export function SidebarUserMenu({ user, showSettingsLink = false }: SidebarUserM
         >
           <div className="px-2 py-1.5">
             <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              Theme
+              Tema
             </span>
             <div className="mt-1.5 grid grid-cols-3 gap-1">
               {THEME_OPTIONS.map((option) => {
@@ -119,7 +119,7 @@ export function SidebarUserMenu({ user, showSettingsLink = false }: SidebarUserM
               className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs/relaxed hover:bg-muted"
             >
               <IoSettingsOutline className="size-3.5" />
-              Dashboard settings
+              Configuración del panel
             </Link>
           )}
           <button
@@ -129,7 +129,7 @@ export function SidebarUserMenu({ user, showSettingsLink = false }: SidebarUserM
             className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs/relaxed hover:bg-muted"
           >
             <IoLogOutOutline className="size-3.5" />
-            Sign out
+            Cerrar sesión
           </button>
         </div>
       )}

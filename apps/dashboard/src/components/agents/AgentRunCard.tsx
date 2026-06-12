@@ -16,11 +16,11 @@ import { cn, formatRelativeTime } from "@/lib/utils"
 type SourceIcon = ComponentType<SVGProps<SVGSVGElement>>
 
 const SOURCE_META: Record<AgentSource, { icon: SourceIcon; label: string }> = {
-  dashboard: { icon: ChatCircleIcon, label: "Dashboard" },
+  dashboard: { icon: ChatCircleIcon, label: "Panel" },
   github: { icon: IoLogoGithub, label: "GitHub" },
   slack: { icon: IoLogoSlack, label: "Slack" },
   linear: { icon: SiLinear, label: "Linear" },
-  schedule: { icon: CalendarBlankIcon, label: "Schedule" },
+  schedule: { icon: CalendarBlankIcon, label: "Programada" },
 }
 
 interface AgentRunCardProps {
@@ -43,7 +43,7 @@ export function AgentRunCard({ thread }: AgentRunCardProps) {
         {stats ? (
           <>
             <div className="text-[11px] font-medium text-[var(--ui-text-muted)]">
-              {stats.files} {stats.files === 1 ? "file" : "files"}
+              {stats.files} {stats.files === 1 ? "archivo" : "archivos"}
             </div>
             <div className="mt-0.5 flex items-center gap-1.5 text-xs font-medium">
               <span className="text-[var(--ui-success)]">

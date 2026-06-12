@@ -141,18 +141,18 @@ function CloudAgentsPage() {
   return (
     <AppShell
       user={session.data}
-      title="Open SWE Agent"
-      description="Configure how the Open SWE Agent picks a model, repository, and PR defaults."
+      title="Agente en la nube"
+      description="Configura cómo el agente elige modelo, repositorio y valores predeterminados de PR."
     >
-      <SettingsSection title="Defaults">
+      <SettingsSection title="Valores predeterminados">
         <div className="divide-y divide-border">
           <SettingsRow
-            label="Default Model"
-            description="Used when no model is specified"
+            label="Modelo predeterminado"
+            description="Se usa cuando no se especifica un modelo"
             control={
               <Select value={modelId} onValueChange={(v) => v && setModelId(v)}>
                 <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Pick a model" />
+                  <SelectValue placeholder="Elige un modelo" />
                 </SelectTrigger>
                 <SelectContent>
                   {options.data?.models.map((m) => (
@@ -165,8 +165,8 @@ function CloudAgentsPage() {
             }
           />
           <SettingsRow
-            label="Reasoning Effort"
-            description="How hard the model thinks before answering"
+            label="Esfuerzo de razonamiento"
+            description="Cuánto piensa el modelo antes de responder"
             control={
               <Select value={effort} onValueChange={(v) => v && setEffort(v)}>
                 <SelectTrigger className="w-32">
@@ -183,15 +183,15 @@ function CloudAgentsPage() {
             }
           />
           <SettingsRow
-            label="Default Subagent Model"
-            description="Used for delegated tasks launched by your agent"
+            label="Modelo de subagente predeterminado"
+            description="Se usa para las tareas delegadas que lanza tu agente"
             control={
               <Select
                 value={subagentModelId}
                 onValueChange={(v) => v && setSubagentModelId(v)}
               >
                 <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Pick a model" />
+                  <SelectValue placeholder="Elige un modelo" />
                 </SelectTrigger>
                 <SelectContent>
                   {options.data?.models.map((m) => (
@@ -204,8 +204,8 @@ function CloudAgentsPage() {
             }
           />
           <SettingsRow
-            label="Subagent Reasoning Effort"
-            description="How hard delegated subagents think before answering"
+            label="Esfuerzo de razonamiento del subagente"
+            description="Cuánto piensan los subagentes delegados antes de responder"
             control={
               <Select
                 value={subagentEffort}
@@ -225,8 +225,8 @@ function CloudAgentsPage() {
             }
           />
           <SettingsRow
-            label="Default Repository"
-            description="Used when no repository is specified"
+            label="Repositorio predeterminado"
+            description="Se usa cuando no se especifica un repositorio"
             control={
               repos.data?.repositories?.length ? (
                 <div className="w-56">
@@ -234,8 +234,8 @@ function CloudAgentsPage() {
                     repos={repos.data.repositories}
                     selectedRepo={defaultRepo || null}
                     onRepoChange={(repo) => setDefaultRepo(repo ?? "")}
-                    placeholder="Pick a repository…"
-                    emptySelectionLabel="No default repository"
+                    placeholder="Elige un repositorio…"
+                    emptySelectionLabel="Sin repositorio predeterminado"
                     triggerClassName="h-7 w-full max-w-none rounded-md border border-input bg-input/20 px-2 py-1.5 text-xs/relaxed text-foreground transition-colors hover:opacity-100 dark:bg-input/30"
                     dropdownClassName="w-56"
                   />
@@ -251,22 +251,22 @@ function CloudAgentsPage() {
             }
           />
           <SettingsRow
-            label="Base Branch"
-            description="When empty, Cloud Agent will use a repository's default branch (recommended)"
+            label="Base branch"
+            description="Si se deja vacío, el agente usará la branch por defecto del repositorio (recomendado)"
             htmlFor="base-branch"
             control={
               <Input
                 id="base-branch"
                 className="w-56"
-                placeholder="Branch name…"
+                placeholder="Nombre de la branch…"
                 value={baseBranch}
                 onChange={(e) => setBaseBranch(e.target.value)}
               />
             }
           />
           <SettingsRow
-            label="Branch Prefix"
-            description="Prefix for branch names created by Cloud Agent"
+            label="Prefijo de branch"
+            description="Prefijo para los nombres de branch que crea el agente"
             htmlFor="branch-prefix"
             control={
               <Input
@@ -284,7 +284,7 @@ function CloudAgentsPage() {
               onClick={persistDefaults}
               disabled={save.isPending}
             >
-              {save.isPending ? "Saving…" : "Save defaults"}
+              {save.isPending ? "Guardando…" : "Guardar valores"}
             </Button>
           </div>
         </div>
@@ -293,8 +293,8 @@ function CloudAgentsPage() {
       <SettingsSection title="Pull Requests">
         <div className="divide-y divide-border">
           <SettingsRow
-            label="Automatically fix CI failures"
-            description="Agent will attempt to fix failing CI checks on PRs it opens."
+            label="Corregir fallos de CI automáticamente"
+            description="El agente intentará corregir los checks de CI que fallen en los PRs que abre."
             comingSoon
             control={
               <Switch
@@ -305,8 +305,8 @@ function CloudAgentsPage() {
             }
           />
           <SettingsRow
-            label="Always Create PRs"
-            description="Always create a pull request for code changes. When disabled, agents create PRs only when necessary or requested."
+            label="Crear PRs siempre"
+            description="Crear siempre un pull request para los cambios de código. Si se desactiva, los agentes crean PRs solo cuando es necesario o se solicita."
             control={
               <Switch
                 checked={profile.data?.create_prs ?? false}

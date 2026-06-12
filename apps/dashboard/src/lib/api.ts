@@ -151,69 +151,79 @@ export interface LangSmithConnectBody {
   endpoint?: string | null;
 }
 
-export type UsageLeaderboardPeriod = "7d" | "30d" | "all";
+export type AzureUsagePeriod = "7d" | "30d" | "all";
 
-export interface UsageLeaderboardRow {
-  rank: number;
-  user: {
-    name: string;
-    github_login: string | null;
-    email: string | null;
-  };
-  favorite_model: string;
-  agent_runs: number;
-  prs_opened: number;
-  merged_prs: number;
-  agent_loc: number;
-  additions: number;
-  deletions: number;
-}
-
-export interface ReviewerStatsCounterRow {
+export interface AzureUsageCounterRow {
   name: string;
   count: number;
 }
 
-export interface ReviewerStatsPayload {
-  period: UsageLeaderboardPeriod;
-  reviewed_prs: number;
-  prs_with_findings: number;
-  findings_recorded: number;
-  surfaced_findings: number;
-  addressed_findings: number;
-  resolved_after_update: number;
-  dismissed_findings: number;
-  unresolved_surfaced_findings: number;
-  resolution_rate: number;
-  human_replies: number;
-  severity_counts: Record<string, number>;
-  top_categories: Array<ReviewerStatsCounterRow>;
-  generated_at_ms: number | null;
+export interface AzureWorkItemMetrics {
+  total: number;
+  states: Array<AzureUsageCounterRow>;
+  types: Array<AzureUsageCounterRow>;
+  limited: boolean;
 }
 
-export interface UsageLeaderboardPayload {
-  period: UsageLeaderboardPeriod;
-  rows: Array<UsageLeaderboardRow>;
-  total_members: number;
-  current_user_rank: number | null;
-  generated_at_ms: number | null;
-  reviewer_stats: ReviewerStatsPayload;
+export interface AzureBuild {
+  id: number;
+  build_number: string | null;
+  definition: string | null;
+  status: string | null;
+  result: string | null;
+  source_branch: string | null;
+  requested_for: string | null;
+  queue_time: string | null;
+  start_time: string | null;
+  finish_time: string | null;
+  web_url: string | null;
+}
+
+export interface AzureUsagePayload {
+  project: string;
+  period: AzureUsagePeriod;
+  work_items: AzureWorkItemMetrics;
+  recent_builds: Array<AzureBuild>;
 }
 
 export interface Repository {
+  /** Azure DevOps "<project>/<repo>" — the analogue of GitHub's owner/repo. */
   full_name: string;
-  private: boolean;
+  project?: string;
+  name?: string;
+  id?: string;
+  default_branch?: string | null;
+  web_url?: string | null;
+  /** Legacy GitHub field, retained optional until the review pages are reworked. */
+  private?: boolean;
 }
 
-export interface Installation {
+export interface AzureProject {
+  id: string;
+  name: string;
+  description?: string | null;
+  state?: string | null;
+}
+
+export interface AzurePullRequest {
   id: number;
-  account: string | null;
-  account_type: string | null;
+  title: string;
+  status: string;
+  is_draft: boolean;
+  author: string | null;
+  author_email: string | null;
+  created_date: string | null;
+  source_branch: string | null;
+  target_branch: string | null;
+  repo: string | null;
+  project: string;
+  web_url: string | null;
 }
 
 export interface ReposPayload {
-  installations: Array<Installation>;
   repositories: Array<Repository>;
+  /** Legacy GitHub field, retained optional until the review pages are reworked. */
+  installations?: Array<unknown>;
 }
 
 export type ReviewStyleStatus = "idle" | "running" | "completed" | "failed";
@@ -252,7 +262,19 @@ export const api = {
   profile: () => request<Profile>("/profile"),
   saveProfile: (body: ProfileUpdate) =>
     request<Profile>("/profile", { method: "PUT", body: JSON.stringify(body) }),
-  repos: () => request<ReposPayload>("/repos"),
+  repos: (project?: string) =>
+    request<ReposPayload>(
+      `/azure/repos${project ? `?project=${encodeURIComponent(project)}` : ""}`,
+    ),
+  azureProjects: () => request<Array<AzureProject>>("/azure/projects"),
+  azurePullRequests: (project: string) =>
+    request<{ pull_requests: Array<AzurePullRequest> }>(
+      `/azure/pull-requests?project=${encodeURIComponent(project)}`,
+    ),
+  azureUsage: (project: string, period: AzureUsagePeriod = "30d") =>
+    request<AzureUsagePayload>(
+      `/azure/usage?project=${encodeURIComponent(project)}&period=${encodeURIComponent(period)}`,
+    ),
   listReviewStyles: () => request<Array<ReviewStyle>>("/review-styles"),
   createReviewStyle: (full_name: string) =>
     request<ReviewStyle>("/review-styles", {
@@ -320,10 +342,6 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ full_name, enabled }),
     }),
-  usageLeaderboard: (period: UsageLeaderboardPeriod = "30d", limit = 10) =>
-    request<UsageLeaderboardPayload>(
-      `/agent-usage-leaderboard?period=${encodeURIComponent(period)}&limit=${limit}`,
-    ),
   logout: () => request<void>("/auth/logout", { method: "POST" }),
 };
 

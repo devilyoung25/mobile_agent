@@ -24,7 +24,7 @@ import type { ComponentType, SVGProps } from "react"
 import type { SessionUser } from "@/lib/api"
 import type { AgentSource, AgentThread } from "@/lib/agents/types"
 import { SidebarUserMenu } from "@/components/SidebarUserMenu"
-import { AndroidBadge } from "@/components/agents/ported/Logo"
+import { OnOffBrand } from "@/components/OnOffBrand"
 import { Button } from "@/components/ui/button"
 import {
   SidebarCollapseButton,
@@ -83,8 +83,8 @@ interface AgentsSidebarProps {
 }
 
 const NAV = [
-  { to: "/agents/automations", label: "Automations", icon: LightningIcon },
-  { to: "/my-settings", label: "Dashboard", icon: ChartLineUpIcon },
+  { to: "/agents/automations", label: "Automatizaciones", icon: LightningIcon },
+  { to: "/my-settings", label: "Panel", icon: ChartLineUpIcon },
 ] as const
 
 export function AgentsSidebar({ user, activeThreadId }: AgentsSidebarProps) {
@@ -100,12 +100,8 @@ export function AgentsSidebar({ user, activeThreadId }: AgentsSidebarProps) {
       className="border-r border-[var(--ui-border)] bg-[var(--ui-sidebar)]"
     >
       <div className="flex items-center justify-between px-4 pt-5 pb-4">
-        <Link
-          to="/my-settings"
-          className="flex items-center gap-2 font-heading text-sm font-medium tracking-tight text-[var(--ui-text)]"
-        >
-          <AndroidBadge className="size-5" />
-          ON Mobile Agent
+        <Link to="/my-settings" className="min-w-0">
+          <OnOffBrand showMobileCue />
         </Link>
         <SidebarCollapseButton onToggle={layout.toggle} />
       </div>
@@ -117,7 +113,7 @@ export function AgentsSidebar({ user, activeThreadId }: AgentsSidebarProps) {
           className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-sidebar-hover)]"
         >
           <PlusIcon className="size-4" />
-          New Agent
+          Nuevo agente
         </Link>
       </div>
 
@@ -144,27 +140,27 @@ export function AgentsSidebar({ user, activeThreadId }: AgentsSidebarProps) {
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         <ThreadGroup
-          label="Today"
+          label="Hoy"
           threads={groups.today}
           activeThreadId={activeThreadId}
           onNavigate={layout.closeOnMobile}
         />
         <ThreadGroup
-          label="Last 7 days"
+          label="Últimos 7 días"
           threads={groups.last7}
           activeThreadId={activeThreadId}
           onNavigate={layout.closeOnMobile}
           defaultCollapsed
         />
         <ThreadGroup
-          label="Last 30 days"
+          label="Últimos 30 días"
           threads={groups.last30}
           activeThreadId={activeThreadId}
           onNavigate={layout.closeOnMobile}
           defaultCollapsed
         />
         <ThreadGroup
-          label="Older"
+          label="Anteriores"
           threads={groups.older}
           activeThreadId={activeThreadId}
           onNavigate={layout.closeOnMobile}
@@ -289,7 +285,7 @@ function ThreadRow({
           {thread.status === "running" ? (
             <CircleNotchIcon
               className="size-3 shrink-0 animate-spin text-[var(--ui-accent)]"
-              aria-label="Thread running"
+              aria-label="Hilo en ejecución"
             />
           ) : (
             <span
@@ -300,7 +296,7 @@ function ThreadRow({
                   : "bg-[var(--ui-border)]"
               )}
               aria-label={
-                showFinishedIndicator ? "Thread finished" : "Thread viewed"
+                showFinishedIndicator ? "Hilo terminado" : "Hilo visto"
               }
             />
           )}
@@ -333,7 +329,7 @@ function ThreadRow({
           )}
           <button
             type="button"
-            aria-label="Delete thread"
+            aria-label="Eliminar hilo"
             onClick={onDelete}
             disabled={isDeleting}
             className="hidden size-4 shrink-0 items-center justify-center rounded text-[var(--ui-text-dim)] group-hover:flex hover:bg-[var(--ui-panel-2)] hover:text-[var(--ui-text)]"
@@ -350,7 +346,7 @@ function ThreadRow({
                 className="flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-xs outline-none select-none data-highlighted:bg-[var(--ui-sidebar-hover)] data-disabled:pointer-events-none data-disabled:opacity-50"
               >
                 <TreeStructureIcon className="size-3.5" />
-                Open trace
+                Ver traza
               </ContextMenu.Item>
               <ContextMenu.Item
                 onClick={onDelete}
@@ -358,7 +354,7 @@ function ThreadRow({
                 className="flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-[var(--ui-danger)] outline-none select-none data-highlighted:bg-[var(--ui-sidebar-hover)] data-disabled:pointer-events-none data-disabled:opacity-50"
               >
                 <TrashIcon className="size-3.5" />
-                Delete thread
+                Eliminar hilo
               </ContextMenu.Item>
             </ContextMenu.Popup>
           </ContextMenu.Positioner>
@@ -370,10 +366,10 @@ function ThreadRow({
           <Dialog.Popup className="fixed top-1/2 left-1/2 z-50 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-lg bg-popover p-6 text-popover-foreground shadow-md ring-1 ring-foreground/10 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
             <div className="flex flex-col gap-4">
               <Dialog.Title className="text-base font-semibold">
-                Delete thread
+                Eliminar hilo
               </Dialog.Title>
               <Dialog.Description className="text-sm text-muted-foreground">
-                Delete "{thread.title}"? This cannot be undone.
+                ¿Eliminar «{thread.title}»? Esta acción no se puede deshacer.
               </Dialog.Description>
               <div className="mt-2 flex justify-end gap-2">
                 <Button
@@ -382,7 +378,7 @@ function ThreadRow({
                   onClick={() => setDeleteOpen(false)}
                   disabled={isDeleting}
                 >
-                  Cancel
+                  Cancelar
                 </Button>
                 <Button
                   variant="destructive"
@@ -390,7 +386,7 @@ function ThreadRow({
                   onClick={onConfirmDelete}
                   disabled={isDeleting}
                 >
-                  {isDeleting ? "Deleting..." : "Delete"}
+                  {isDeleting ? "Eliminando..." : "Eliminar"}
                 </Button>
               </div>
             </div>

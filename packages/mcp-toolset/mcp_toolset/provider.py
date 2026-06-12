@@ -36,12 +36,25 @@ class McpToolsetProvider:
         except Exception:  # noqa: BLE001
             logger.warning("Failed to load MCP tools for %s", self.name, exc_info=True)
             return []
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "MCP %s exposed %d raw tool(s): %s",
+                self.name,
+                len(tools),
+                [getattr(t, "name", "?") for t in tools],
+            )
         result = filter_tools(tools, self.policy)
         if result.blocked:
             logger.info(
                 "Blocked %d non-allowed MCP tool(s) from %s", len(result.blocked), self.name
             )
+            logger.debug("Blocked MCP %s tool(s): %s", self.name, result.blocked)
         logger.info("Loaded %d MCP tool(s) from %s", len(result.allowed), self.name)
+        logger.debug(
+            "Loaded MCP %s tool(s): %s",
+            self.name,
+            [getattr(t, "name", "?") for t in result.allowed],
+        )
         return result.allowed
 
     async def _build_tools(self) -> list[Any]:

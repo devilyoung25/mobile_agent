@@ -22,6 +22,12 @@ from .agent_instructions import (
     set_agent_instructions,
 )
 from .auth_tokens import upsert_auth_tokens
+from .azure_devops_api import (
+    get_project_usage,
+    list_projects,
+    list_pull_requests,
+    list_repositories,
+)
 from .entra_oauth import (
     build_authorize_url as build_entra_authorize_url,
 )
@@ -453,6 +459,42 @@ async def api_delete_schedule(
 ) -> Response:
     await delete_agent_schedule(schedule_id, session["sub"], email=session.get("email"))
     return Response(status_code=204)
+
+
+@router.get("/azure/projects")
+async def api_azure_projects(
+    session: dict[str, Any] = _SESSION_DEP,
+) -> list[dict[str, Any]]:
+    return await list_projects(session["sub"])
+
+
+@router.get("/azure/repos")
+async def api_azure_repos(
+    project: str | None = None,
+    session: dict[str, Any] = _SESSION_DEP,
+) -> dict[str, Any]:
+    repositories = await list_repositories(session["sub"], project)
+    return {"repositories": repositories}
+
+
+@router.get("/azure/pull-requests")
+async def api_azure_pull_requests(
+    project: str,
+    status: str = "active",
+    session: dict[str, Any] = _SESSION_DEP,
+) -> dict[str, Any]:
+    pull_requests = await list_pull_requests(session["sub"], project, status=status)
+    return {"pull_requests": pull_requests}
+
+
+@router.get("/azure/usage")
+async def api_azure_usage(
+    project: str,
+    period: str = "30d",
+    session: dict[str, Any] = _SESSION_DEP,
+) -> dict[str, Any]:
+    normalized_period = period if period in {"7d", "30d", "all"} else "30d"
+    return await get_project_usage(session["sub"], project, period=normalized_period)
 
 
 @router.get("/threads")

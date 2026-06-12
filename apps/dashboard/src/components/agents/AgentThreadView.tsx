@@ -72,7 +72,7 @@ export function AgentThreadView({ thread }: AgentThreadViewProps) {
             <div className="shrink-0 px-4 pb-4">
               <div className="mx-auto w-full min-w-0 max-w-3xl">
                 <AgentPromptBar
-                  placeholder="Add a follow up"
+                  placeholder="Escribe un seguimiento"
                   compact
                   busy={isStreaming}
                   disabled={sendMessage.isPending}
@@ -93,16 +93,16 @@ export function AgentThreadView({ thread }: AgentThreadViewProps) {
           </div>
         ) : isHydrating ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
-            <p className="text-sm text-[var(--ui-text-dim)]">Loading conversation…</p>
+            <p className="text-sm text-[var(--ui-text-dim)]">Cargando conversación…</p>
           </div>
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
             <p className="text-sm text-[var(--ui-text-dim)]">
-              This thread has no messages yet.
+              Este hilo aún no tiene mensajes.
             </p>
             <div className="w-full max-w-3xl">
               <AgentPromptBar
-                placeholder="Send the first message"
+                placeholder="Envía el primer mensaje"
                 compact
                 busy={isStreaming}
                 disabled={sendMessage.isPending}

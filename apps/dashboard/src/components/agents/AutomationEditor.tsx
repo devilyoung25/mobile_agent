@@ -144,11 +144,11 @@ export function AutomationEditor({ mode, schedule }: AutomationEditorProps) {
             to="/agents/automations"
             className="shrink-0 transition-colors hover:text-[var(--ui-text)]"
           >
-            Automations
+            Automatizaciones
           </Link>
           <span className="shrink-0">/</span>
           <span className="truncate text-[var(--ui-text)]">
-            {name.trim() || "New automation"}
+            {name.trim() || "Nueva automatización"}
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -158,7 +158,7 @@ export function AutomationEditor({ mode, schedule }: AutomationEditorProps) {
               size="icon"
               onClick={handleDelete}
               disabled={deleteSchedule.isPending}
-              aria-label="Delete automation"
+              aria-label="Eliminar automatización"
               className="text-[var(--ui-text-dim)] hover:text-[var(--ui-danger)]"
             >
               <TrashIcon className="size-4" />
@@ -166,10 +166,10 @@ export function AutomationEditor({ mode, schedule }: AutomationEditorProps) {
           )}
           <Button onClick={handleSave} disabled={!canSave || isSaving}>
             {isSaving
-              ? "Saving…"
+              ? "Guardando…"
               : mode === "create"
-                ? "Create"
-                : "Save changes"}
+                ? "Crear"
+                : "Guardar cambios"}
           </Button>
         </div>
       </header>
@@ -178,7 +178,7 @@ export function AutomationEditor({ mode, schedule }: AutomationEditorProps) {
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Untitled automation"
+          placeholder="Automatización sin título"
           className="w-full bg-transparent text-2xl font-semibold text-[var(--ui-text)] outline-none placeholder:text-[var(--ui-text-dim)]"
         />
 
@@ -186,7 +186,7 @@ export function AutomationEditor({ mode, schedule }: AutomationEditorProps) {
           <div className="flex items-center gap-2">
             <Switch checked={enabled} onCheckedChange={setEnabled} />
             <span className="text-[var(--ui-text-muted)]">
-              {enabled ? "Active" : "Paused"}
+              {enabled ? "Activa" : "Pausada"}
             </span>
           </div>
           <span className="text-[var(--ui-border)]">|</span>
@@ -194,12 +194,12 @@ export function AutomationEditor({ mode, schedule }: AutomationEditorProps) {
             repos={reposQuery.data?.repositories}
             selectedRepo={repo}
             onRepoChange={setRepo}
-            placeholder="No repository"
+            placeholder="Sin repositorio"
             triggerClassName="text-[var(--ui-text-muted)]"
           />
         </div>
 
-        <SectionLabel>Triggers</SectionLabel>
+        <SectionLabel>Disparadores</SectionLabel>
         <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-1.5">
           {cron && (
             <div className="flex items-center gap-3 rounded-lg px-3 py-2.5">
@@ -222,7 +222,7 @@ export function AutomationEditor({ mode, schedule }: AutomationEditorProps) {
                   setCron(null)
                   setCustomMode(false)
                 }}
-                aria-label="Remove trigger"
+                aria-label="Quitar disparador"
                 className="shrink-0 rounded p-1 text-[var(--ui-text-dim)] hover:bg-[var(--ui-panel-2)] hover:text-[var(--ui-text)]"
               >
                 <TrashIcon className="size-3.5" />
@@ -232,16 +232,16 @@ export function AutomationEditor({ mode, schedule }: AutomationEditorProps) {
           {cron && <div className="mx-3 h-px bg-[var(--ui-border-subtle)]" />}
           <ScheduleTriggerPicker
             onSelect={onPickTrigger}
-            triggerLabel={cron ? "Change trigger" : "Add Trigger"}
+            triggerLabel={cron ? "Cambiar disparador" : "Añadir disparador"}
           />
         </div>
 
-        <SectionLabel>Agent Instructions</SectionLabel>
+        <SectionLabel>Instrucciones del agente</SectionLabel>
         <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-3">
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="What should Open SWE do each time this runs?"
+            placeholder="¿Qué debe hacer el agente cada vez que se ejecute?"
             rows={5}
             className="w-full resize-none bg-transparent text-sm leading-relaxed text-[var(--ui-text)] outline-none placeholder:text-[var(--ui-text-dim)]"
           />

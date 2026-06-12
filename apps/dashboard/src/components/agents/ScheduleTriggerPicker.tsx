@@ -16,12 +16,12 @@ const OPTIONS: Array<{ id: string; label: string; cron: string | null }> = [
     label: preset.label,
     cron: preset.value,
   })),
-  { id: "custom", label: "Custom (cron)", cron: null },
+  { id: "custom", label: "Personalizado (cron)", cron: null },
 ]
 
 export function ScheduleTriggerPicker({
   onSelect,
-  triggerLabel = "Add Trigger",
+  triggerLabel = "Añadir disparador",
 }: ScheduleTriggerPickerProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -51,7 +51,7 @@ export function ScheduleTriggerPicker({
         <div className="absolute top-full left-0 z-50 mt-1 w-72 overflow-hidden rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface)] py-1 shadow-lg">
           <div className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-semibold tracking-wide text-[var(--ui-text-dim)] uppercase">
             <ClockIcon className="size-3.5" />
-            Scheduled
+            Programado
           </div>
           {OPTIONS.map((option) => (
             <button

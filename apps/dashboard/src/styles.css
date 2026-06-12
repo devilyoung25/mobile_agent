@@ -75,6 +75,12 @@
     --chart-4: #268214;
     --chart-5: #036300;
     --radius: 0.625rem;
+    /* ON OFF brand constants — identical in light and dark (the logo mark
+       always reads white-on-green-on-black). Consumed by OnOffMark/OnOffBrand. */
+    --onoff-green: #41a52c;
+    --onoff-black: #111111;
+    --onoff-white: #fefefe;
+    --onoff-gray: #858585;
     --sidebar: #f3f8f2;
     --sidebar-foreground: #111111;
     --sidebar-primary: #41a52c;

@@ -36,7 +36,7 @@ function PlainSubmitButton({ canSubmit, disabled, onSubmit }: SubmitButtonProps)
       type="button"
       onClick={onSubmit}
       disabled={!canSubmit}
-      aria-label="Send message"
+      aria-label="Enviar mensaje"
       className="shrink-0 rounded-full bg-[var(--ui-accent)] text-white hover:bg-[var(--ui-accent)] hover:opacity-90 disabled:cursor-default disabled:opacity-40"
     >
       {disabled ? (
@@ -85,8 +85,8 @@ function StreamSubmitButton(props: SubmitButtonProps) {
       type="button"
       onClick={() => void handleStop()}
       disabled={stopping}
-      aria-label="Stop run"
-      title="Stop run"
+      aria-label="Detener ejecución"
+      title="Detener ejecución"
       className="shrink-0 rounded-full bg-[var(--ui-accent)] text-white hover:bg-[var(--ui-accent)] hover:opacity-90 disabled:cursor-default disabled:opacity-40"
     >
       {stopping ? (
@@ -149,7 +149,7 @@ function fileToImageChunk(file: File): Promise<ImageChunk | null> {
 
 /** Web-adapted PromptBar from open-swe-app — local state, no Electron/Zustand deps. */
 export const CloudPromptBar = memo(function CloudPromptBarComponent({
-  placeholder = "Ask Open SWE to build, fix bugs, explore",
+  placeholder = "Pídele al agente construir, arreglar bugs o explorar",
   compact = false,
   disabled = false,
   busy = false,
@@ -338,7 +338,7 @@ export const CloudPromptBar = memo(function CloudPromptBarComponent({
                 />
                 <button
                   type="button"
-                  aria-label="Remove image"
+                  aria-label="Quitar imagen"
                   onClick={() =>
                     setPendingImages((prev) =>
                       prev.filter((_, i) => i !== index)
@@ -359,7 +359,7 @@ export const CloudPromptBar = memo(function CloudPromptBarComponent({
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={busy ? "Send a message to queue next..." : placeholder}
+          placeholder={busy ? "Escribe un mensaje para encolarlo..." : placeholder}
           disabled={disabled}
           className={cn(
             "w-full min-w-0 resize-none overflow-hidden bg-transparent text-[13px] leading-[1.45] text-[color:var(--ui-text)] outline-none placeholder:text-[color:var(--ui-text-dim)]",
@@ -420,7 +420,7 @@ export const CloudPromptBar = memo(function CloudPromptBarComponent({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled || pendingImages.length >= MAX_IMAGE_COUNT}
-            aria-label="Attach images"
+            aria-label="Adjuntar imágenes"
             className="ml-auto flex size-7 shrink-0 items-center justify-center rounded-full text-[color:var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-panel-2)] hover:text-[color:var(--ui-text)] disabled:cursor-default disabled:opacity-40"
           >
             <ImagePlus className="size-4" />

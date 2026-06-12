@@ -25,39 +25,42 @@ REMOTE_TOOLSET_BY_DOMAIN = {
     "test-plans": "testplan",
     "testplan": "testplan",
 }
+# Marker-less read tools the allow_markers below can't catch: these start with
+# ``search_`` (not ``_search_``), so they need an explicit allow entry. Every
+# other read tool (``repo_list_*``, ``repo_get_*``, ``wit_get_*``,
+# ``repo_search_commits``, ``pipelines_*_get_*`` …) is admitted by the markers.
 REMOTE_READ_ONLY_TOOLS = (
-    "core_list_orgs",
-    "core_list_projects",
-    "core_list_project_teams",
-    "pipelines_artifact",
-    "pipelines_build",
-    "pipelines_build_log",
-    "pipelines_definition",
-    "pipelines_run",
-    "repo_branch",
-    "repo_file",
-    "repo_pull_request",
-    "repo_pull_request_thread",
-    "repo_repository",
-    "repo_search_commits",
     "search_code",
     "search_wiki",
     "search_workitem",
-    "testplan",
-    "testplan_show_test_results_from_build_id",
-    "wiki",
-    "wit_backlog",
-    "wit_query",
-    "wit_work_item",
-    "wit_work_item_attachment",
-    "work",
 )
 
+# Write verbs — defense-in-depth. Read-marker absence already blocks writes;
+# these also reject any hypothetical hybrid name that pairs a read marker with a
+# mutating verb (e.g. ``*_list_and_update_*``).
+WRITE_DENY_MARKERS = (
+    "_create_",
+    "_update_",
+    "_delete_",
+    "_add_",
+    "_remove_",
+    "_run_",
+    "_queue_",
+    "_publish_",
+    "_set_",
+)
+
+# No ``prefix``: this provider only ever connects to the Azure DevOps server, so
+# every returned tool is an ADO tool. The official ``@azure-devops/mcp`` stdio
+# server exposes tools by their raw, un-prefixed names (``repo_list_repos_by_project``,
+# ``wit_get_work_item`` …); a non-empty prefix would short-circuit the markers
+# and silently drop everything but a few exact-name matches.
 READ_ONLY_POLICY = ToolPolicy(
-    prefix="mcp_ado_",
+    prefix="",
     allow_names=REMOTE_READ_ONLY_TOOLS,
     allow_markers=("_list_", "_get_", "_search_", "_query_", "_show_"),
     allow_suffixes=("_my_work_items",),
+    deny_markers=WRITE_DENY_MARKERS,
 )
 
 AZURE_DEVOPS_PROMPT_FRAGMENT = """---
@@ -67,6 +70,8 @@ AZURE_DEVOPS_PROMPT_FRAGMENT = """---
 This run is connected to Azure DevOps in a **read-only** capacity. You can gather context — work items, comments, relations, repositories, branches, pull requests, pipelines, and builds — through the available Azure DevOps tools, but you must NOT perform any persistent or write action.
 
 Use the Azure DevOps MCP tools for Azure DevOps context. Do not use shell commands (`az`, `curl`, custom scripts) or generic HTTP tools as an Azure DevOps fallback. If the Azure DevOps MCP tools are unavailable or fail, stop and report the MCP/configuration failure instead of trying another credential path.
+
+**Discovering repositories:** To find the repositories in a project, call the repository-listing tool (`repo_list_repos_by_project`) for that project — this is the only authoritative source of repositories. Never use `search_code` to enumerate or guess repositories, and never infer a repository's existence from search results: `search_code` is only valid *after* you already know a real repository name. Do not treat `Fetch`/HTTP against `dev.azure.com` as a reliable way to read repositories (the web app is a session-protected SPA). If no repository-listing tool is available to you, say so explicitly rather than guessing a repository name.
 
 Specifically, in this phase you must NEVER:
 - Open, update, merge, or approve pull requests.

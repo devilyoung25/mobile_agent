@@ -9,17 +9,18 @@ from mcp_toolset import McpToolsetProvider, ToolPolicy, filter_tools
 
 
 def test_read_only_policy_allows_read_operations() -> None:
+    # Raw, un-prefixed names as the official @azure-devops/mcp stdio server emits.
     allowed = [
-        "mcp_ado_wit_get_work_item",
-        "mcp_ado_repo_list_branches_by_repo",
-        "mcp_ado_search_code",
-        "mcp_ado_wit_query_by_wiql",
-        "mcp_ado_wit_my_work_items",
-        "wit_work_item",
-        "repo_repository",
-        "repo_pull_request",
-        "pipelines_build",
+        "repo_list_repos_by_project",
+        "repo_list_branches_by_repo",
+        "repo_get_repo_by_name_or_id",
+        "wit_get_work_item",
+        "wit_query_by_wiql",
+        "wit_my_work_items",
+        "search_code",
+        "search_wiki",
         "search_workitem",
+        "core_list_projects",
     ]
 
     assert all(ado.is_azure_devops_read_only_tool(name) for name in allowed)
@@ -27,33 +28,31 @@ def test_read_only_policy_allows_read_operations() -> None:
 
 def test_read_only_policy_blocks_persistent_operations() -> None:
     blocked = [
-        "mcp_ado_repo_create_pull_request",
-        "mcp_ado_wit_add_work_item_comment",
-        "mcp_ado_repo_update_pull_request",
-        "mcp_ado_pipelines_run_pipeline",
-        "wit_work_item_write",
+        "repo_create_pull_request",
+        "wit_add_work_item_comment",
+        "repo_update_pull_request",
+        "pipelines_run_pipeline",
         "repo_create_branch",
-        "pipelines_write",
-        "other_server_tool",
+        "wit_delete_work_item",
     ]
 
     assert not any(ado.is_azure_devops_read_only_tool(name) for name in blocked)
 
 
 def test_filter_tools_splits_allowed_and_blocked() -> None:
-    read_tool = SimpleNamespace(name="mcp_ado_wit_get_work_item")
-    write_tool = SimpleNamespace(name="mcp_ado_repo_create_pull_request")
-    remote_read_tool = SimpleNamespace(name="wit_work_item")
-    remote_write_tool = SimpleNamespace(name="wit_work_item_write")
-    foreign_tool = SimpleNamespace(name="fetch_url")
+    read_tool = SimpleNamespace(name="wit_get_work_item")
+    list_tool = SimpleNamespace(name="repo_list_repos_by_project")
+    write_tool = SimpleNamespace(name="repo_create_pull_request")
+    comment_tool = SimpleNamespace(name="wit_add_work_item_comment")
 
     result = filter_tools(
-        [read_tool, write_tool, remote_read_tool, remote_write_tool, foreign_tool],
+        [read_tool, list_tool, write_tool, comment_tool],
         ado.READ_ONLY_POLICY,
     )
 
-    assert result.allowed == [read_tool, remote_read_tool]
-    assert result.blocked == ["mcp_ado_repo_create_pull_request"]
+    assert result.allowed == [read_tool, list_tool]
+    # prefix="" — every non-allowed tool now surfaces in the blocked list.
+    assert result.blocked == ["repo_create_pull_request", "wit_add_work_item_comment"]
 
 
 def test_policy_deny_markers_win_over_allow() -> None:
@@ -152,4 +151,6 @@ def test_provider_carries_prompt_fragment(monkeypatch: pytest.MonkeyPatch) -> No
     assert provider is not None
     assert "Read-Only Context Phase" in provider.prompt_fragment
     assert "Do not use shell commands (`az`, `curl`, custom scripts)" in provider.prompt_fragment
+    assert "repo_list_repos_by_project" in provider.prompt_fragment
+    assert "Never use `search_code` to enumerate" in provider.prompt_fragment
     assert provider.policy is ado.READ_ONLY_POLICY

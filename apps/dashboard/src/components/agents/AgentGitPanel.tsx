@@ -252,8 +252,8 @@ export function AgentGitPanel({ thread, messages }: AgentGitPanelProps) {
       <button
         type="button"
         onClick={() => setCollapsed(false)}
-        aria-label="Expand git panel"
-        title="Expand git panel"
+        aria-label="Expandir panel de Git"
+        title="Expandir panel de Git"
         className="fixed top-3 right-3 z-30 flex size-7 items-center justify-center rounded-md border border-border bg-background text-muted-foreground shadow-sm hover:bg-accent hover:text-foreground"
       >
         <SidebarSimpleIcon className="size-4" />
@@ -297,8 +297,8 @@ export function AgentGitPanel({ thread, messages }: AgentGitPanelProps) {
             setFullScreen(false)
             setCollapsed(true)
           }}
-          aria-label="Collapse git panel"
-          title="Collapse git panel"
+          aria-label="Contraer panel de Git"
+          title="Contraer panel de Git"
           className="ml-auto rounded-md p-1.5 text-[var(--ui-text-dim)] transition-colors hover:bg-[var(--ui-panel-2)] hover:text-[var(--ui-text)]"
         >
           <SidebarSimpleIcon className="size-4" />
@@ -306,7 +306,7 @@ export function AgentGitPanel({ thread, messages }: AgentGitPanelProps) {
         <button
           type="button"
           onClick={() => setFullScreen((v) => !v)}
-          aria-label={fullScreen ? "Exit full screen" : "Enter full screen"}
+          aria-label={fullScreen ? "Salir de pantalla completa" : "Pantalla completa"}
           className="rounded-md p-1.5 text-[var(--ui-text-dim)] transition-colors hover:bg-[var(--ui-panel-2)] hover:text-[var(--ui-text)]"
         >
           {fullScreen ? (
@@ -416,7 +416,7 @@ export function AgentGitPanel({ thread, messages }: AgentGitPanelProps) {
                 ? "Coming Soon"
                 : prDiff.isLoading
                   ? "Loading PR diff…"
-                  : "No diff available."}
+                  : "No hay diff disponible."}
             </div>
           )}
         </div>

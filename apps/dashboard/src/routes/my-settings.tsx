@@ -77,7 +77,7 @@ function MySettingsPage() {
 
   const draftChoice = toChoice(profile.data?.review_draft_prs)
   const teamDefaultOn = teamSettings.data?.review_draft_prs ?? false
-  const teamDefaultLabel = `Use team default (currently: ${teamDefaultOn ? "On" : "Off"})`
+  const teamDefaultLabel = `Usar el valor del equipo (actual: ${teamDefaultOn ? "Activado" : "Desactivado"})`
 
   const handleDraftChoiceChange = (next: DraftReviewChoice) => {
     setError(null)
@@ -94,10 +94,10 @@ function MySettingsPage() {
   }
 
   return (
-    <AppShell user={session.data} title="Profile Settings">
-      <SettingsSection title="Profile">
+    <AppShell user={session.data} title="Configuración del perfil">
+      <SettingsSection title="Perfil">
         <SettingsRow
-          label="Email"
+          label="Correo"
           control={
             <span className="text-xs text-muted-foreground">
               {session.data.email ?? "—"}
@@ -106,10 +106,10 @@ function MySettingsPage() {
         />
       </SettingsSection>
 
-      <SettingsSection title="Open SWE Review">
+      <SettingsSection title="Revisión de código">
         <SettingsRow
-          label="Review my draft PRs"
-          description="Whether Open SWE Review runs on pull requests you open in draft. When set to the team default, your admin's org-wide setting applies."
+          label="Revisar mis PRs en borrador"
+          description="Define si la revisión de código se ejecuta en los pull requests que abres en borrador. Con el valor del equipo, se aplica la configuración global de tu administrador."
           control={
             <Select
               value={draftChoice}
@@ -124,10 +124,10 @@ function MySettingsPage() {
               <SelectContent>
                 <SelectItem value="team_default">{teamDefaultLabel}</SelectItem>
                 <SelectItem value="always_on">
-                  Always review my drafts
+                  Revisar siempre mis borradores
                 </SelectItem>
                 <SelectItem value="always_off">
-                  Never review my drafts
+                  No revisar nunca mis borradores
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -135,17 +135,17 @@ function MySettingsPage() {
         />
       </SettingsSection>
 
-      <SettingsSection title="Account">
+      <SettingsSection title="Cuenta">
         <SettingsRow
-          label="Sign out"
-          description="End your dashboard session."
+          label="Cerrar sesión"
+          description="Cierra tu sesión del panel."
           control={
             <Button
               size="sm"
               variant="outline"
               onClick={() => void handleLogout()}
             >
-              Sign out
+              Cerrar sesión
             </Button>
           }
         />

@@ -24,9 +24,9 @@ function AgentInstructionsPage() {
   return (
     <AppShell
       user={session.data}
-      title="Repository Instructions"
-      description="Per-repo custom instructions appended to the coding agent's system prompt for runs targeting that repository."
-      backTo={{ to: "/cloud-agents", label: "Back to Open SWE Agent" }}
+      title="Instrucciones del repositorio"
+      description="Instrucciones personalizadas por repo que se añaden al prompt de sistema del agente en las ejecuciones dirigidas a ese repositorio."
+      backTo={{ to: "/cloud-agents", label: "Volver al agente en la nube" }}
     >
       <div className="rounded-lg border border-border bg-card">
         <AgentInstructionsPanel />

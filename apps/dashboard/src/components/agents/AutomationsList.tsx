@@ -19,9 +19,9 @@ import {
 import { cn } from "@/lib/utils"
 
 function formatDate(value?: string | null): string {
-  if (!value) return "Never run"
+  if (!value) return "Sin ejecuciones"
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "Never run"
+  if (Number.isNaN(date.getTime())) return "Sin ejecuciones"
   return date.toLocaleString(undefined, {
     month: "short",
     day: "numeric",
@@ -43,27 +43,27 @@ export function AutomationsList() {
     <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-4xl px-6 py-8 max-md:pt-16">
         <h1 className="text-2xl font-semibold text-[var(--ui-text)]">
-          Automations
+          Automatizaciones
         </h1>
         <p className="mt-1 text-sm text-[var(--ui-text-muted)]">
-          Run Open SWE on a recurring schedule. Each run starts a fresh agent
-          thread.
+          Ejecuta el agente con una programación recurrente. Cada ejecución
+          inicia un hilo de agente nuevo.
         </p>
 
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard label="Total" value={total} />
-          <StatCard label="Active" value={active} />
-          <StatCard label="Paused" value={paused} />
-          <StatCard label="Needs attention" value={issues} highlight={issues > 0} />
+          <StatCard label="Activas" value={active} />
+          <StatCard label="Pausadas" value={paused} />
+          <StatCard label="Requieren atención" value={issues} highlight={issues > 0} />
         </div>
 
         <div className="mt-8 flex items-center justify-between">
           <span className="text-sm font-medium text-[var(--ui-text-muted)]">
-            {total} {total === 1 ? "automation" : "automations"}
+            {total} {total === 1 ? "automatización" : "automatizaciones"}
           </span>
           <Link to="/agents/automations/new" className={buttonVariants()}>
             <PlusIcon className="size-4" />
-            New Automation
+            Nueva automatización
           </Link>
         </div>
 
@@ -119,18 +119,18 @@ function EmptyState() {
         <LightningIcon className="size-5" />
       </div>
       <h3 className="mt-4 text-sm font-medium text-[var(--ui-text)]">
-        No automations yet
+        Aún no hay automatizaciones
       </h3>
       <p className="mt-1 max-w-sm text-sm text-[var(--ui-text-muted)]">
-        Schedule Open SWE to run on a recurring cadence — review code, triage
-        issues, or keep docs up to date.
+        Programa el agente para ejecutarse con una cadencia recurrente: revisar
+        código, clasificar incidencias o mantener la documentación al día.
       </p>
       <Link
         to="/agents/automations/new"
         className={cn(buttonVariants(), "mt-4")}
       >
         <PlusIcon className="size-4" />
-        New Automation
+        Nueva automatización
       </Link>
     </div>
   )
@@ -171,9 +171,9 @@ function AutomationRow({ schedule }: { schedule: AgentSchedule }) {
           {schedule.lastError && (
             <WarningCircleIcon
               className="size-3.5 shrink-0 text-[var(--ui-danger)]"
-              aria-label="Last run failed"
+              aria-label="La última ejecución falló"
             >
-              <title>Last run failed</title>
+              <title>La última ejecución falló</title>
             </WarningCircleIcon>
           )}
         </div>
@@ -183,14 +183,14 @@ function AutomationRow({ schedule }: { schedule: AgentSchedule }) {
             {describeCron(schedule.schedule)}
           </span>
           {schedule.repo && <span>{schedule.repo}</span>}
-          <span>Last run: {formatDate(schedule.lastTriggeredAt)}</span>
+          <span>Última ejecución: {formatDate(schedule.lastTriggeredAt)}</span>
         </div>
       </div>
       <button
         type="button"
         onClick={onToggle}
         disabled={isToggling}
-        aria-label={schedule.enabled ? "Pause automation" : "Resume automation"}
+        aria-label={schedule.enabled ? "Pausar automatización" : "Reanudar automatización"}
         className="shrink-0 rounded-md p-1.5 text-[var(--ui-text-dim)] transition-colors hover:bg-[var(--ui-panel-2)] hover:text-[var(--ui-text)] disabled:opacity-40"
       >
         {schedule.enabled ? (

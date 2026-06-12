@@ -32,7 +32,9 @@ def _load_daytona_module(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "daytona", fake_daytona)
     monkeypatch.setitem(sys.modules, "langchain_daytona", fake_langchain_daytona)
-    module_path = ROOT / "agent" / "integrations" / "daytona.py"
+    # agent.integrations is a compatibility shim whose __path__ redirects to
+    # platform/integrations/agent_integrations, so the real module file lives there.
+    module_path = ROOT / "platform" / "integrations" / "agent_integrations" / "daytona.py"
     spec = importlib.util.spec_from_file_location("daytona_under_test", module_path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

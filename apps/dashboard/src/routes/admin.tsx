@@ -46,8 +46,8 @@ function AdminPage() {
   return (
     <AppShell
       user={session.data}
-      title="Admin"
-      description="Workspace-wide defaults and credentials."
+      title="Administración"
+      description="Valores predeterminados y credenciales de todo el espacio de trabajo."
     >
       <GlobalDefaultsSection models={options.data?.models ?? []} />
 
@@ -110,16 +110,16 @@ function ObservabilityCredentialsSection() {
 
   return (
     <SettingsSection
-      title="Observability credentials"
-      description="Team-wide Datadog and LangSmith credentials. Stored encrypted server-side and never exposed to the sandbox. Connecting enables read-only observability tools for agent runs."
+      title="Credenciales de observabilidad"
+      description="Credenciales de Datadog y LangSmith para todo el equipo. Se guardan cifradas en el servidor y nunca se exponen al sandbox. Conectarlas habilita herramientas de observabilidad de solo lectura para las ejecuciones del agente."
     >
       <div className="divide-y divide-border">
         <SettingsRow
           label="Datadog"
           description={
             datadog?.connected
-              ? `Connected · ${datadog.site ?? ""} · key ••••${datadog.api_key_last4 ?? ""}`
-              : "Connect Datadog to enable read-only metrics, logs, traces, and monitor tools."
+              ? `Conectado · ${datadog.site ?? ""} · clave ••••${datadog.api_key_last4 ?? ""}`
+              : "Conecta Datadog para habilitar métricas, logs, trazas y monitores de solo lectura."
           }
           control={
             datadog?.connected ? (
@@ -129,7 +129,7 @@ function ObservabilityCredentialsSection() {
                 onClick={() => disconnectDd.mutate()}
                 disabled={disconnectDd.isPending}
               >
-                Disconnect
+                Desconectar
               </Button>
             ) : (
               <div className="flex flex-col items-end gap-2">
@@ -142,7 +142,7 @@ function ObservabilityCredentialsSection() {
                 />
                 <Input
                   className="w-56"
-                  placeholder="API key"
+                  placeholder="Clave de API"
                   type="password"
                   value={ddApiKey}
                   onChange={(e) => setDdApiKey(e.target.value)}
@@ -150,7 +150,7 @@ function ObservabilityCredentialsSection() {
                 />
                 <Input
                   className="w-56"
-                  placeholder="Application key"
+                  placeholder="Clave de aplicación"
                   type="password"
                   value={ddAppKey}
                   onChange={(e) => setDdAppKey(e.target.value)}
@@ -172,7 +172,7 @@ function ObservabilityCredentialsSection() {
                     !ddAppKey.trim()
                   }
                 >
-                  Connect
+                  Conectar
                 </Button>
               </div>
             )
@@ -182,8 +182,8 @@ function ObservabilityCredentialsSection() {
           label="LangSmith"
           description={
             langsmith?.connected
-              ? `Connected · key ••••${langsmith.api_key_last4 ?? ""}${langsmith.endpoint ? ` · ${langsmith.endpoint}` : ""}`
-              : "Connect LangSmith to enable read-only trace and run lookup tools."
+              ? `Conectado · clave ••••${langsmith.api_key_last4 ?? ""}${langsmith.endpoint ? ` · ${langsmith.endpoint}` : ""}`
+              : "Conecta LangSmith para habilitar herramientas de solo lectura de trazas y consulta de ejecuciones."
           }
           control={
             langsmith?.connected ? (
@@ -193,13 +193,13 @@ function ObservabilityCredentialsSection() {
                 onClick={() => disconnectLs.mutate()}
                 disabled={disconnectLs.isPending}
               >
-                Disconnect
+                Desconectar
               </Button>
             ) : (
               <div className="flex flex-col items-end gap-2">
                 <Input
                   className="w-56"
-                  placeholder="API key"
+                  placeholder="Clave de API"
                   type="password"
                   value={lsApiKey}
                   onChange={(e) => setLsApiKey(e.target.value)}
@@ -207,7 +207,7 @@ function ObservabilityCredentialsSection() {
                 />
                 <Input
                   className="w-56"
-                  placeholder="Endpoint (optional)"
+                  placeholder="Endpoint (opcional)"
                   value={lsEndpoint}
                   onChange={(e) => setLsEndpoint(e.target.value)}
                   disabled={busy}
@@ -222,7 +222,7 @@ function ObservabilityCredentialsSection() {
                   }
                   disabled={connectLs.isPending || !lsApiKey.trim()}
                 >
-                  Connect
+                  Conectar
                 </Button>
               </div>
             )
@@ -258,13 +258,13 @@ function GlobalDefaultsSection({ models }: { models: Array<ModelOption> }) {
 
   return (
     <SettingsSection
-      title="Global defaults"
-      description="Workspace-wide model defaults. Per-user Cloud Agent selections override the agent defaults."
+      title="Valores predeterminados globales"
+      description="Modelos predeterminados para todo el espacio de trabajo. Las selecciones por usuario del Agente en la nube tienen prioridad sobre estos valores."
     >
       <div className="divide-y divide-border">
         <RolePicker
-          label="Open SWE Agent"
-          description="Model used for code-writing runs triggered from Slack, Linear, GitHub, and the Open SWE Agent."
+          label="Agente"
+          description="Modelo usado en las ejecuciones de escritura de código disparadas desde Slack, Linear, GitHub y el agente."
           models={models}
           model={settings.data?.default_agent_model ?? null}
           effort={settings.data?.default_agent_reasoning_effort ?? null}
@@ -279,8 +279,8 @@ function GlobalDefaultsSection({ models }: { models: Array<ModelOption> }) {
           disabled={!settings.data || save.isPending}
         />
         <RolePicker
-          label="Open SWE Agent subagents"
-          description="Model used by delegated main-agent tasks."
+          label="Subagentes del agente"
+          description="Modelo usado por las tareas delegadas del agente principal."
           models={models}
           model={settings.data?.default_agent_subagent_model ?? null}
           effort={settings.data?.default_agent_subagent_reasoning_effort ?? null}
@@ -295,8 +295,8 @@ function GlobalDefaultsSection({ models }: { models: Array<ModelOption> }) {
           disabled={!settings.data || save.isPending}
         />
         <SettingsRow
-          label="Default Repository"
-          description="Global fallback used when a run has no explicit repo and the user has no profile default. Use owner/repo."
+          label="Repositorio predeterminado"
+          description="Reserva global usada cuando una ejecución no tiene repo explícito y el usuario no tiene uno predeterminado en su perfil. Usa owner/repo."
           control={
             <Input
               className="w-56"
@@ -315,8 +315,8 @@ function GlobalDefaultsSection({ models }: { models: Array<ModelOption> }) {
           }
         />
         <RolePicker
-          label="Open SWE Reviewer"
-          description="Model used for PR review runs."
+          label="Revisor de código"
+          description="Modelo usado en las ejecuciones de revisión de PR."
           models={models}
           model={settings.data?.default_reviewer_model ?? null}
           effort={settings.data?.default_reviewer_reasoning_effort ?? null}
@@ -331,8 +331,8 @@ function GlobalDefaultsSection({ models }: { models: Array<ModelOption> }) {
           disabled={!settings.data || save.isPending}
         />
         <RolePicker
-          label="Open SWE Reviewer subagents"
-          description="Model used by delegated reviewer tasks."
+          label="Subagentes del revisor"
+          description="Modelo usado por las tareas delegadas del revisor."
           models={models}
           model={settings.data?.default_reviewer_subagent_model ?? null}
           effort={settings.data?.default_reviewer_subagent_reasoning_effort ?? null}
