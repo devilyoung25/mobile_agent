@@ -1,6 +1,6 @@
 from unittest.mock import AsyncMock, patch
 
-from agent.dashboard.auth_tokens import upsert_auth_tokens
+from identity_entra.tokens import upsert_auth_tokens
 
 
 async def test_upsert_auth_tokens_encrypts_provider_tokens() -> None:
@@ -9,10 +9,8 @@ async def test_upsert_auth_tokens_encrypts_provider_tokens() -> None:
     client.store = store
 
     with (
-        patch("agent.dashboard.auth_tokens.get_client", return_value=client),
-        patch(
-            "agent.dashboard.auth_tokens.encrypt_token", side_effect=lambda token: f"enc:{token}"
-        ),
+        patch("identity_entra.tokens.get_client", return_value=client),
+        patch("identity_entra.tokens.encrypt_token", side_effect=lambda token: f"enc:{token}"),
     ):
         await upsert_auth_tokens(
             actor_id="entra:user-oid",

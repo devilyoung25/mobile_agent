@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from cryptography.fernet import Fernet
 
-from agent.encryption import (
+from identity_entra.encryption import (
     EncryptionKeyMissingError,
     _get_encryption_keys,
     _parse_encryption_keys,

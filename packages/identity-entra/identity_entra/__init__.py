@@ -1,39 +1,35 @@
-"""Microsoft Entra OAuth — re-exported from the identity-entra package."""
+"""Microsoft Entra identity provider for ON Mobile Agent."""
 
-from identity_entra.oauth import (
-    ENTRA_AUTHORITY_HOST,
-    ENTRA_SCOPES,
+from .encryption import EncryptionKeyMissingError, decrypt_token, encrypt_token
+from .models import AuthenticatedUser, user_from_actor_id
+from .oauth import (
     build_authorize_url,
     code_challenge_for,
     enforce_entra_allowlist,
     entra_authority,
-    entra_authorize_endpoint,
     entra_client_id,
-    entra_client_secret,
-    entra_tenant,
-    entra_token_endpoint,
     exchange_entra_code,
     identity_from_claims,
     new_code_verifier,
-    token_expires_at,
     validate_entra_id_token,
 )
+from .tokens import expires_at_from_token_response, upsert_auth_tokens
 
 __all__ = [
-    "ENTRA_AUTHORITY_HOST",
-    "ENTRA_SCOPES",
+    "AuthenticatedUser",
+    "EncryptionKeyMissingError",
     "build_authorize_url",
     "code_challenge_for",
+    "decrypt_token",
+    "encrypt_token",
     "enforce_entra_allowlist",
     "entra_authority",
-    "entra_authorize_endpoint",
     "entra_client_id",
-    "entra_client_secret",
-    "entra_tenant",
-    "entra_token_endpoint",
     "exchange_entra_code",
+    "expires_at_from_token_response",
     "identity_from_claims",
     "new_code_verifier",
-    "token_expires_at",
+    "upsert_auth_tokens",
+    "user_from_actor_id",
     "validate_entra_id_token",
 ]

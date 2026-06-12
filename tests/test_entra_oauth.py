@@ -3,8 +3,7 @@ from urllib.parse import parse_qs, urlparse
 import jwt
 import pytest
 from fastapi import HTTPException
-
-from agent.dashboard import entra_oauth
+from identity_entra import oauth as entra_oauth
 
 
 def _oct_jwk(kid: str, secret: bytes = b"secret") -> dict[str, str]:
