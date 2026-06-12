@@ -151,23 +151,6 @@ export interface LangSmithConnectBody {
   endpoint?: string | null;
 }
 
-export interface UserMapping {
-  github_login: string;
-  work_email: string;
-  slack_user_id?: string | null;
-  source?: string;
-  status?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface UserMappingsPage {
-  items: Array<UserMapping>;
-  total: number;
-  page: number;
-  page_size: number;
-}
-
 export type UsageLeaderboardPeriod = "7d" | "30d" | "all";
 
 export interface UsageLeaderboardRow {
@@ -341,16 +324,6 @@ export const api = {
     request<UsageLeaderboardPayload>(
       `/agent-usage-leaderboard?period=${encodeURIComponent(period)}&limit=${limit}`,
     ),
-  myMapping: () => request<Partial<UserMapping>>("/my-mapping"),
-  adminListUserMappings: (page = 1, pageSize = 20) =>
-    request<UserMappingsPage>(
-      `/admin/user-mappings?page=${page}&page_size=${pageSize}`,
-    ),
-  adminDeleteUserMapping: (github_login: string) =>
-    request<{ deleted: boolean }>(
-      `/admin/user-mappings/${encodeURIComponent(github_login)}`,
-      { method: "DELETE" },
-    ),
   logout: () => request<void>("/auth/logout", { method: "POST" }),
 };
 
@@ -358,8 +331,4 @@ export function loginUrl(redirectTo?: string): string {
   const target = redirectTo ?? (typeof window !== "undefined" ? window.location.origin : "");
   const qs = target ? `?redirect_to=${encodeURIComponent(target)}` : "";
   return `${API_BASE}/dashboard/api/entra/login${qs}`;
-}
-
-export function slackConnectUrl(): string {
-  return `${API_BASE}/dashboard/api/slack/login`;
 }

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
-import { ApiError, api } from "./api"
+import { api } from "./api"
 import { useSession } from "./session"
 import type { Profile, ProfileUpdate } from "./api"
 
@@ -23,19 +23,13 @@ export function useOptions() {
 }
 
 export function useRepos() {
-  const session = useSession()
+  // The GitHub-backed /repos endpoint was removed in the Azure DevOps migration.
+  // Return an empty set so repo pickers render cleanly without 404-ing on load;
+  // Azure DevOps repositories will be wired through the MCP toolset later.
   return useQuery({
     queryKey: ["repos"],
-    queryFn: async () => {
-      try {
-        return await api.repos()
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 401)
-          return { installations: [], repositories: [] }
-        throw e
-      }
-    },
-    enabled: !!session.data,
+    queryFn: async () => ({ installations: [], repositories: [] }),
+    staleTime: Infinity,
   })
 }
 

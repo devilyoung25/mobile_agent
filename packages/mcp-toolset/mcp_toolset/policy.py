@@ -19,16 +19,22 @@ class ToolPolicy:
     """
 
     prefix: str = ""
+    allow_names: tuple[str, ...] = ()
     allow_markers: tuple[str, ...] = ()
     allow_suffixes: tuple[str, ...] = ()
+    deny_names: tuple[str, ...] = ()
     deny_markers: tuple[str, ...] = ()
 
     def allows(self, name: str) -> bool:
         normalized = name.strip().lower()
-        if self.prefix and not normalized.startswith(self.prefix):
+        if any(denied == normalized for denied in self.deny_names):
             return False
+        if self.prefix and not normalized.startswith(self.prefix):
+            return normalized in self.allow_names
         if any(marker in normalized for marker in self.deny_markers):
             return False
+        if any(allowed == normalized for allowed in self.allow_names):
+            return True
         if not self.allow_markers and not self.allow_suffixes:
             return True
         return any(marker in normalized for marker in self.allow_markers) or (

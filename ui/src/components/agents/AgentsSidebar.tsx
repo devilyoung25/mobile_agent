@@ -24,6 +24,7 @@ import type { ComponentType, SVGProps } from "react"
 import type { SessionUser } from "@/lib/api"
 import type { AgentSource, AgentThread } from "@/lib/agents/types"
 import { SidebarUserMenu } from "@/components/SidebarUserMenu"
+import { AndroidBadge } from "@/components/agents/ported/Logo"
 import { Button } from "@/components/ui/button"
 import {
   SidebarCollapseButton,
@@ -103,8 +104,8 @@ export function AgentsSidebar({ user, activeThreadId }: AgentsSidebarProps) {
           to="/my-settings"
           className="flex items-center gap-2 font-heading text-sm font-medium tracking-tight text-[var(--ui-text)]"
         >
-          <img src="/logo-mark.png" alt="" className="size-5" />
-          open-swe
+          <AndroidBadge className="size-5" />
+          ON Mobile Agent
         </Link>
         <SidebarCollapseButton onToggle={layout.toggle} />
       </div>

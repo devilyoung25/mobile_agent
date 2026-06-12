@@ -14,9 +14,48 @@ from typing import Any
 from mcp_toolset import McpToolsetProvider, ToolPolicy
 
 DEFAULT_AZURE_DEVOPS_DOMAINS = "core,work,work-items,repositories,pipelines,test-plans,search,wiki"
+REMOTE_TOOLSET_BY_DOMAIN = {
+    "repositories": "repos",
+    "repos": "repos",
+    "work-items": "wit",
+    "wit": "wit",
+    "pipelines": "pipelines",
+    "wiki": "wiki",
+    "work": "work",
+    "test-plans": "testplan",
+    "testplan": "testplan",
+}
+REMOTE_READ_ONLY_TOOLS = (
+    "core_list_orgs",
+    "core_list_projects",
+    "core_list_project_teams",
+    "pipelines_artifact",
+    "pipelines_build",
+    "pipelines_build_log",
+    "pipelines_definition",
+    "pipelines_run",
+    "repo_branch",
+    "repo_file",
+    "repo_pull_request",
+    "repo_pull_request_thread",
+    "repo_repository",
+    "repo_search_commits",
+    "search_code",
+    "search_wiki",
+    "search_workitem",
+    "testplan",
+    "testplan_show_test_results_from_build_id",
+    "wiki",
+    "wit_backlog",
+    "wit_query",
+    "wit_work_item",
+    "wit_work_item_attachment",
+    "work",
+)
 
 READ_ONLY_POLICY = ToolPolicy(
     prefix="mcp_ado_",
+    allow_names=REMOTE_READ_ONLY_TOOLS,
     allow_markers=("_list_", "_get_", "_search_", "_query_", "_show_"),
     allow_suffixes=("_my_work_items",),
 )
@@ -26,6 +65,8 @@ AZURE_DEVOPS_PROMPT_FRAGMENT = """---
 ### Azure DevOps: Read-Only Context Phase
 
 This run is connected to Azure DevOps in a **read-only** capacity. You can gather context — work items, comments, relations, repositories, branches, pull requests, pipelines, and builds — through the available Azure DevOps tools, but you must NOT perform any persistent or write action.
+
+Use the Azure DevOps MCP tools for Azure DevOps context. Do not use shell commands (`az`, `curl`, custom scripts) or generic HTTP tools as an Azure DevOps fallback. If the Azure DevOps MCP tools are unavailable or fail, stop and report the MCP/configuration failure instead of trying another credential path.
 
 Specifically, in this phase you must NEVER:
 - Open, update, merge, or approve pull requests.
@@ -48,6 +89,15 @@ def _organization() -> str:
 def _domains() -> list[str]:
     raw = os.environ.get("AZURE_DEVOPS_MCP_DOMAINS", DEFAULT_AZURE_DEVOPS_DOMAINS)
     return [part.strip() for part in raw.split(",") if part.strip()]
+
+
+def _remote_toolsets() -> str:
+    toolsets = {
+        REMOTE_TOOLSET_BY_DOMAIN[domain]
+        for domain in _domains()
+        if domain in REMOTE_TOOLSET_BY_DOMAIN
+    }
+    return ",".join(sorted(toolsets))
 
 
 def _transport() -> str:
@@ -108,7 +158,12 @@ def azure_devops_provider(*, bearer_token: str | None = None) -> McpToolsetProvi
     ``bearer_token`` authenticates the remote (streamable_http) endpoint; the
     stdio transport authenticates via the local server's own flags instead.
     """
-    headers = {"Authorization": f"Bearer {bearer_token}"} if bearer_token else None
+    headers = {"X-MCP-Readonly": "true"}
+    toolsets = _remote_toolsets()
+    if toolsets:
+        headers["X-MCP-Toolsets"] = toolsets
+    if bearer_token:
+        headers["Authorization"] = f"Bearer {bearer_token}"
     config = _server_config(headers)
     if config is None:
         return None

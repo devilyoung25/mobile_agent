@@ -1,9 +1,7 @@
 import { Navigate, createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
-import { IoLogoSlack } from "react-icons/io5"
 
-import type { SessionUser } from "@/lib/api"
 import { AppShell, SettingsRow, SettingsSection } from "@/components/AppShell"
 import { Button } from "@/components/ui/button"
 import {
@@ -14,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
-import { api, slackConnectUrl } from "@/lib/api"
+import { api } from "@/lib/api"
 import {
   buildProfileUpdate,
   useOptions,
@@ -22,7 +20,6 @@ import {
   useSaveProfile,
 } from "@/lib/profile"
 import { useSession } from "@/lib/session"
-import { cn } from "@/lib/utils"
 
 export const Route = createFileRoute("/my-settings")({
   component: MySettingsPage,
@@ -40,82 +37,6 @@ function fromChoice(choice: DraftReviewChoice): boolean | null {
   if (choice === "always_on") return true
   if (choice === "always_off") return false
   return null
-}
-
-function UserMappingSection({ session }: { session: SessionUser }) {
-  const qc = useQueryClient()
-  const mapping = useQuery({ queryKey: ["myMapping"], queryFn: api.myMapping })
-  const [connecting, setConnecting] = useState(false)
-
-  const slackUserId = mapping.data?.slack_user_id ?? null
-  const workEmail = mapping.data?.work_email ?? null
-  const connected = !!slackUserId
-
-  const connect = () => {
-    setConnecting(true)
-    // Refresh the cached mapping when the user returns from the OAuth redirect.
-    void qc.invalidateQueries({ queryKey: ["myMapping"] })
-    window.location.assign(slackConnectUrl())
-  }
-
-  return (
-    <SettingsSection
-      title="User mapping"
-      description="Connect your Slack account so Open SWE can resolve your GitHub account when you tag it in Slack. We use the email Slack verifies, which also lets Linear mentions resolve to you."
-    >
-      <div className="divide-y divide-border">
-        <SettingsRow
-          label="GitHub account"
-          control={
-            <span className="text-xs text-muted-foreground">
-              {session.login}
-            </span>
-          }
-        />
-        <SettingsRow
-          label="Slack account"
-          description={
-            connected
-              ? `Linked to Slack member ${slackUserId}${workEmail ? ` · ${workEmail}` : ""}.`
-              : "Not connected. Sign in with Slack to verify your identity — no manual IDs to copy."
-          }
-          control={
-            <div className="flex items-center gap-2">
-              <span
-                className={cn(
-                  "rounded-full px-2 py-0.5 text-[10px] font-medium",
-                  connected
-                    ? "bg-primary/10 text-primary"
-                    : "bg-muted text-muted-foreground"
-                )}
-              >
-                {connected ? "Connected" : "Not connected"}
-              </span>
-              {session.slack_oauth_enabled ? (
-                <Button
-                  size="sm"
-                  variant={connected ? "outline" : "default"}
-                  onClick={connect}
-                  disabled={connecting || mapping.isLoading}
-                >
-                  <IoLogoSlack className="size-4" />
-                  {connecting
-                    ? "Redirecting…"
-                    : connected
-                      ? "Reconnect"
-                      : "Connect Slack"}
-                </Button>
-              ) : (
-                <span className="text-[10px] text-muted-foreground">
-                  Sign in with Slack unavailable
-                </span>
-              )}
-            </div>
-          }
-        />
-      </div>
-    </SettingsSection>
-  )
 }
 
 function MySettingsPage() {
@@ -184,8 +105,6 @@ function MySettingsPage() {
           }
         />
       </SettingsSection>
-
-      <UserMappingSection session={session.data} />
 
       <SettingsSection title="Open SWE Review">
         <SettingsRow

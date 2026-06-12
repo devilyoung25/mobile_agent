@@ -15,6 +15,11 @@ def test_read_only_policy_allows_read_operations() -> None:
         "mcp_ado_search_code",
         "mcp_ado_wit_query_by_wiql",
         "mcp_ado_wit_my_work_items",
+        "wit_work_item",
+        "repo_repository",
+        "repo_pull_request",
+        "pipelines_build",
+        "search_workitem",
     ]
 
     assert all(ado.is_azure_devops_read_only_tool(name) for name in allowed)
@@ -26,6 +31,9 @@ def test_read_only_policy_blocks_persistent_operations() -> None:
         "mcp_ado_wit_add_work_item_comment",
         "mcp_ado_repo_update_pull_request",
         "mcp_ado_pipelines_run_pipeline",
+        "wit_work_item_write",
+        "repo_create_branch",
+        "pipelines_write",
         "other_server_tool",
     ]
 
@@ -35,11 +43,16 @@ def test_read_only_policy_blocks_persistent_operations() -> None:
 def test_filter_tools_splits_allowed_and_blocked() -> None:
     read_tool = SimpleNamespace(name="mcp_ado_wit_get_work_item")
     write_tool = SimpleNamespace(name="mcp_ado_repo_create_pull_request")
+    remote_read_tool = SimpleNamespace(name="wit_work_item")
+    remote_write_tool = SimpleNamespace(name="wit_work_item_write")
     foreign_tool = SimpleNamespace(name="fetch_url")
 
-    result = filter_tools([read_tool, write_tool, foreign_tool], ado.READ_ONLY_POLICY)
+    result = filter_tools(
+        [read_tool, write_tool, remote_read_tool, remote_write_tool, foreign_tool],
+        ado.READ_ONLY_POLICY,
+    )
 
-    assert result.allowed == [read_tool]
+    assert result.allowed == [read_tool, remote_read_tool]
     assert result.blocked == ["mcp_ado_repo_create_pull_request"]
 
 
@@ -115,11 +128,22 @@ def test_local_server_config_uses_official_package_and_domains(
     assert config["env"] == {"ado_mcp_project": "Mobile"}
 
 
-def test_remote_server_config_uses_official_remote_endpoint() -> None:
-    config = ado._remote_server_config("onoff")
+def test_remote_server_config_uses_official_remote_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AZURE_DEVOPS_MCP_ORG", "onoff")
+    monkeypatch.setenv("AZURE_DEVOPS_MCP_DOMAINS", "core,work-items,repositories,wiki")
+    provider = ado.azure_devops_provider(bearer_token="token")
+    assert provider is not None
+    config = provider.server_config
 
     assert config["transport"] == "streamable_http"
     assert config["url"] == "https://mcp.dev.azure.com/onoff"
+    assert config["headers"] == {
+        "X-MCP-Readonly": "true",
+        "X-MCP-Toolsets": "repos,wiki,wit",
+        "Authorization": "Bearer token",
+    }
 
 
 def test_provider_carries_prompt_fragment(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -127,4 +151,5 @@ def test_provider_carries_prompt_fragment(monkeypatch: pytest.MonkeyPatch) -> No
     provider = ado.azure_devops_provider()
     assert provider is not None
     assert "Read-Only Context Phase" in provider.prompt_fragment
+    assert "Do not use shell commands (`az`, `curl`, custom scripts)" in provider.prompt_fragment
     assert provider.policy is ado.READ_ONLY_POLICY

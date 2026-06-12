@@ -7,7 +7,6 @@ import type { AgentThread, ImageChunk } from "@/lib/agents/types"
 import type { CreateAgentThreadVariables } from "@/lib/agents/queries"
 import type { ModelSelection } from "@/lib/agents/provider/useModelOptions"
 import { AgentPromptBar } from "@/components/agents/AgentPromptBar"
-import { SlackConnectDialog } from "@/components/agents/SlackConnectDialog"
 import { Logo } from "@/components/agents/ported/Logo"
 import { agentThreadKeys, optimisticThread } from "@/lib/agents/queries"
 import { useModelOptions } from "@/lib/agents/provider/useModelOptions"
@@ -102,7 +101,6 @@ export function AgentsHome() {
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-y-auto px-6 py-8">
-      <SlackConnectDialog />
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center">
         <div className="flex w-full flex-col items-center gap-6">
           <Logo />

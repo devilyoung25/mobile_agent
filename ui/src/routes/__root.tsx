@@ -23,8 +23,8 @@ export const Route = createRootRoute({
         name: "viewport",
         content: "width=device-width, initial-scale=1, maximum-scale=1",
       },
-      { name: "theme-color", content: "#000000" },
-      { title: "open-swe" },
+      { name: "theme-color", content: "#41a52c" },
+      { title: "ON Mobile Agent" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
