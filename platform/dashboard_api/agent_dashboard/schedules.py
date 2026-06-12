@@ -10,7 +10,8 @@ from typing import Any
 from fastapi import HTTPException
 from pydantic import BaseModel, Field, field_validator
 
-from ..utils.thread_ops import langgraph_client
+from agent.utils.thread_ops import langgraph_client
+
 from .agent_instructions import normalize_repo_full_name
 from .options import is_supported_model, model_supports_effort
 from .profiles import get_profile

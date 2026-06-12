@@ -1,5 +1,5 @@
 // Ported desktop git panel — calls host `window.git`, not used by the web dashboard
-// (see AgentGitPanel). Excluded from tsconfig until integrated; see ui/tsconfig.json.
+// (see AgentGitPanel). Excluded from tsconfig until integrated; see apps/dashboard/tsconfig.json.
 import { useState, useCallback, useRef, memo, useMemo, useEffect } from "react";
 import { MultiFileDiff } from "@pierre/diffs/react";
 import type { FileContents } from "@pierre/diffs/react";

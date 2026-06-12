@@ -11,7 +11,7 @@ cd "$ROOT_DIR"
 
 NGROK_CMD="${NGROK_CMD:-ngrok http 2024}"
 BACKEND_CMD="${BACKEND_CMD:-uv run langgraph dev --no-browser --no-reload --port 2024}"
-FRONTEND_CMD="${FRONTEND_CMD:-cd ui && bun run dev -- --strictPort}"
+FRONTEND_CMD="${FRONTEND_CMD:-cd apps/dashboard && bun run dev -- --strictPort}"
 OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
 DEV_ALL_KILL_PORTS="${DEV_ALL_KILL_PORTS:-0}"
 

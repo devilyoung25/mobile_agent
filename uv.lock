@@ -1998,7 +1998,7 @@ wheels = [
 [[package]]
 name = "on-core"
 version = "0.1.0"
-source = { editable = "packages/core" }
+source = { editable = "engine/open-swe-core" }
 dependencies = [
     { name = "anthropic" },
     { name = "deepagents" },
@@ -2148,7 +2148,7 @@ requires-dist = [
     { name = "langgraph-sdk", specifier = ">=0.4.2" },
     { name = "langsmith", specifier = "==0.8.11" },
     { name = "markdownify", specifier = ">=1.2.2" },
-    { name = "on-core", editable = "packages/core" },
+    { name = "on-core", editable = "engine/open-swe-core" },
     { name = "on-identity-entra", editable = "packages/identity-entra" },
     { name = "on-integration-azure-devops", editable = "packages/integration-azure-devops" },
     { name = "on-mcp-toolset", editable = "packages/mcp-toolset" },

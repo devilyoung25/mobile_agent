@@ -136,7 +136,7 @@ This is an area where you can extend Open SWE for your org: add deterministic CI
 - **GitHub OAuth built-in** — authenticates with your GitHub account automatically
 - **Opens PRs automatically** — commits changes and opens a draft PR when done, linked back to your ticket
 - **Subagent support** — the agent can spawn child agents for parallel subtasks
-- **Web dashboard** — a companion app (in `ui/`) for GitHub login, per-user model/profile settings, team defaults, enabled-repo and review-style management, user mappings, and an Agents chat UI
+- **Web dashboard** — a companion app (in `apps/dashboard/`) for Microsoft Entra login, per-user model/profile settings, team defaults, review-style management, and an Agents chat UI
 
 ---
 

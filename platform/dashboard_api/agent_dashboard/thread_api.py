@@ -16,13 +16,14 @@ from fastapi import HTTPException
 from langchain_core.messages.content import create_image_block
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..utils.langsmith import get_langsmith_trace_url
-from ..utils.thread_ops import (
+from agent.utils.langsmith import get_langsmith_trace_url
+from agent.utils.thread_ops import (
     get_thread_active_status,
     langgraph_client,
     langgraph_url,
     queue_message_for_thread,
 )
+
 from .agent_overrides import normalize_profile_overrides
 from .options import is_supported_model, model_supports_effort, model_supports_images
 from .profiles import get_profile

@@ -45,7 +45,7 @@ dev = [
 ]
 
 [tool.uv.workspace]
-members = ["packages/*"]
+members = ["engine/*", "packages/*"]
 
 [tool.uv.sources]
 on-model-launcher = { workspace = true }

@@ -9,7 +9,7 @@ result's ``artifact`` with a ``{"diff": {...}}`` payload.
 ``ToolMessage.artifact`` is a standard serialized field, so it survives the
 checkpoint + ``GET …/state`` hydration: the client renders the same diff live
 and on reload straight from ``stream.messages`` — no second adapter and no
-client-side sandbox access (see ``ui/src/lib/agents/streamMessagesToUi.ts``).
+client-side sandbox access (see ``apps/dashboard/src/lib/agents/streamMessagesToUi.ts``).
 
 Everything here is best-effort. On any failure — no cached sandbox, a binary or
 truncated read, a missing ``old_string`` — the tool result is returned untouched
