@@ -33,7 +33,10 @@ def test_build_authorize_url_uses_entra_v2_code_flow_with_pkce(monkeypatch) -> N
     assert q["response_type"] == ["code"]
     assert q["response_mode"] == ["query"]
     assert q["redirect_uri"] == ["http://localhost:2024/dashboard/api/entra/callback"]
-    assert q["scope"] == ["openid profile email offline_access"]
+    assert q["scope"] == [
+        "openid profile email offline_access "
+        "499b84ac-1321-427f-aa17-267ca6975798/user_impersonation"
+    ]
     assert q["state"] == ["state"]
     assert q["nonce"] == ["nonce"]
     assert q["code_challenge_method"] == ["S256"]

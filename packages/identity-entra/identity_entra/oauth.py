@@ -17,7 +17,18 @@ from fastapi import HTTPException
 from .models import AuthenticatedUser
 
 ENTRA_AUTHORITY_HOST = "https://login.microsoftonline.com"
-ENTRA_SCOPES = "openid profile email offline_access"
+
+# Azure DevOps delegated scope. Requested at login so the user grants
+# (incremental, user-level) consent for the Azure DevOps resource — this does
+# not require admin consent, and the resulting refresh token can later be
+# redeemed silently for Azure DevOps access tokens (see tokens.py).
+AZURE_DEVOPS_USER_IMPERSONATION_SCOPE = (
+    "499b84ac-1321-427f-aa17-267ca6975798/user_impersonation"
+)
+
+# OpenID Connect scopes plus the single Azure DevOps resource scope. v2.0
+# allows OIDC scopes alongside exactly one resource's scopes in a request.
+ENTRA_SCOPES = f"openid profile email offline_access {AZURE_DEVOPS_USER_IMPERSONATION_SCOPE}"
 
 
 def _env(name: str) -> str:

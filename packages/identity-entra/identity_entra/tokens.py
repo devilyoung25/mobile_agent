@@ -8,6 +8,7 @@ from typing import Any
 from langgraph_sdk import get_client
 
 from .encryption import encrypt_token
+from .oauth import AZURE_DEVOPS_USER_IMPERSONATION_SCOPE
 
 AUTH_TOKENS_NAMESPACE: list[str] = ["auth_tokens"]
 
@@ -46,10 +47,12 @@ async def upsert_auth_tokens(
     await get_client().store.put_item(AUTH_TOKENS_NAMESPACE, actor_id, value)
 
 
-# Azure DevOps resource id — the well-known Entra application id for the
-# Azure DevOps service. A token minted with this scope authenticates against
-# https://mcp.dev.azure.com and the Azure DevOps REST APIs.
-AZURE_DEVOPS_SCOPE = "499b84ac-1321-427f-aa17-267ca6975798/.default"
+# Azure DevOps delegated scope. Using ``user_impersonation`` (not ``.default``)
+# means the silent refresh redeems the same incremental, user-consented scope
+# the user granted at login — no admin consent required. A token minted with
+# this scope authenticates against https://mcp.dev.azure.com and the Azure
+# DevOps REST APIs.
+AZURE_DEVOPS_SCOPE = AZURE_DEVOPS_USER_IMPERSONATION_SCOPE
 
 
 def _parse_iso(value: Any) -> datetime | None:
