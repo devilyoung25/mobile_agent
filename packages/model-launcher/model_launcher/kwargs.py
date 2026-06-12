@@ -1,0 +1,239 @@
+"""Provider-specific chat-model kwargs and construction (moved from agent/utils/model.py)."""
+
+from __future__ import annotations
+
+import os
+from typing import Literal, TypedDict, Unpack
+
+from langchain.chat_models import init_chat_model
+
+OPENAI_RESPONSES_WS_BASE_URL = "wss://api.openai.com/v1"
+
+# Anthropic SDK default is 2; a 529 burst can outlive that. Bump to give the
+# primary provider a fair chance before the fallback middleware kicks in.
+DEFAULT_MAX_RETRIES = 6
+
+OLLAMA_PREFIX = "ollama:"
+
+OpenAIReasoningEffort = Literal["none", "low", "medium", "high", "xhigh"]
+# OpenAI's Responses API only returns human-readable reasoning text when a
+# summary is requested; without it, reasoning happens silently (billed in
+# output tokens) and the reasoning content block arrives empty.
+OpenAIReasoningSummary = Literal["auto", "concise", "detailed"]
+AnthropicThinkingType = Literal["adaptive"]
+AnthropicThinkingDisplay = Literal["summarized", "omitted"]
+AnthropicEffort = Literal["low", "medium", "high", "xhigh", "max"]
+GoogleThinkingLevel = Literal["minimal", "low", "medium", "high"]
+FireworksReasoningEffort = Literal["none", "low", "medium", "high", "xhigh", "max"]
+
+
+class OpenAIReasoning(TypedDict, total=False):
+    effort: OpenAIReasoningEffort
+    summary: OpenAIReasoningSummary
+
+
+DEFAULT_LLM_REASONING: OpenAIReasoning = {"effort": "medium", "summary": "auto"}
+
+
+class AnthropicThinking(TypedDict, total=False):
+    type: AnthropicThinkingType
+    display: AnthropicThinkingDisplay
+
+
+class ModelKwargs(TypedDict, total=False):
+    max_tokens: int | None
+    reasoning: OpenAIReasoning | None
+    thinking: AnthropicThinking | None
+    effort: AnthropicEffort | None
+    thinking_level: GoogleThinkingLevel | None
+    temperature: float | None
+    max_retries: int | None
+    model_kwargs: dict[str, object] | None
+
+
+_ANTHROPIC_EFFORTS: set[AnthropicEffort] = {"low", "medium", "high", "xhigh", "max"}
+
+
+def is_ollama_model_id(model_id: str | None) -> bool:
+    """Return whether the model id routes to the Ollama-compatible backend."""
+    return isinstance(model_id, str) and model_id.startswith(OLLAMA_PREFIX)
+
+
+def _ollama_base_url() -> str:
+    base = os.environ.get("OLLAMA_BASE_URL", "").strip().rstrip("/")
+    if not base:
+        host = os.environ.get("OLLAMA_HOST", "http://localhost:11434").strip().rstrip("/")
+        base = host
+    if not base.endswith("/v1"):
+        base = f"{base}/v1"
+    return base
+
+
+def _make_ollama_model(model_id: str, **kwargs: Unpack[ModelKwargs]):
+    from langchain_openai import ChatOpenAI
+
+    max_tokens = kwargs.get("max_tokens")
+    env_cap = os.environ.get("OLLAMA_MAX_TOKENS") or os.environ.get("LLM_MAX_TOKENS")
+    if env_cap:
+        max_tokens = int(env_cap)
+    return ChatOpenAI(
+        model=model_id.removeprefix(OLLAMA_PREFIX),
+        api_key=os.environ.get("OLLAMA_API_KEY", "ollama"),
+        base_url=_ollama_base_url(),
+        temperature=float(os.environ.get("OLLAMA_TEMPERATURE", "0")),
+        max_tokens=max_tokens,
+    )
+
+
+def make_model(model_id: str, **kwargs: Unpack[ModelKwargs]):
+    if is_ollama_model_id(model_id):
+        return _make_ollama_model(model_id, **kwargs)
+
+    model_kwargs: dict[str, object] = kwargs.copy()
+    model_kwargs.setdefault("max_retries", DEFAULT_MAX_RETRIES)
+
+    if model_id.startswith("openai:"):
+        model_kwargs["base_url"] = OPENAI_RESPONSES_WS_BASE_URL
+        model_kwargs["use_responses_api"] = True
+
+    return init_chat_model(model=model_id, **model_kwargs)
+
+
+def _provider_key_present(provider: str) -> bool:
+    env_names = {
+        "anthropic": ("ANTHROPIC_API_KEY",),
+        "openai": ("OPENAI_API_KEY",),
+        "google_genai": ("GOOGLE_API_KEY", "GEMINI_API_KEY"),
+        "fireworks": ("FIREWORKS_API_KEY",),
+        "ollama": ("OLLAMA_API_KEY", "OLLAMA_BASE_URL", "OLLAMA_HOST"),
+    }.get(provider, ())
+    return any(os.environ.get(name, "").strip() for name in env_names)
+
+
+def fallback_model_id_for(primary_model_id: str) -> str | None:
+    """Cross-provider fallback for a given primary, only if its key is configured.
+
+    Returns ``None`` for providers without a configured cross-provider fallback
+    (Google, Fireworks, Ollama/local) and when the fallback provider has no API
+    key — a fallback that can only 401 is worse than none.
+    """
+    if primary_model_id.startswith("anthropic:") and _provider_key_present("openai"):
+        return "openai:gpt-5.5"
+    if primary_model_id.startswith("openai:") and _provider_key_present("anthropic"):
+        return "anthropic:claude-opus-4-5"
+    return None
+
+
+def is_gemini_3_family(model_id: str) -> bool:
+    model_name = model_id.split(":", 1)[-1]
+    return model_name.startswith("gemini-3")
+
+
+def openai_reasoning_for(
+    profile_effort: str | None,
+    *,
+    default_effort: OpenAIReasoningEffort | None = None,
+) -> OpenAIReasoning | None:
+    """Return an OpenAI reasoning kwarg from a profile effort string.
+
+    Requests ``summary: "auto"`` for every reasoning effort so the Responses
+    API emits visible reasoning text. ``effort: "none"`` disables reasoning
+    entirely, so no summary is attached.
+    """
+    effort = profile_effort or default_effort or DEFAULT_LLM_REASONING.get("effort")
+    if effort == "none":
+        return {"effort": "none"}
+    if effort == "low":
+        return {"effort": "low", "summary": "auto"}
+    if effort == "medium":
+        return {"effort": "medium", "summary": "auto"}
+    if effort == "high":
+        return {"effort": "high", "summary": "auto"}
+    if effort == "xhigh":
+        return {"effort": "xhigh", "summary": "auto"}
+    return None
+
+
+def anthropic_thinking_for(profile_effort: str | None) -> AnthropicThinking | None:
+    if profile_effort in _ANTHROPIC_EFFORTS:
+        # `display: "summarized"` makes Opus 4.7+ return the (summarized) reasoning
+        # text in the response. The adaptive default is "omitted", which streams a
+        # reasoning block carrying only a signature and no visible thinking — so the
+        # dashboard never has any text to render.
+        return {"type": "adaptive", "display": "summarized"}
+    return None
+
+
+def anthropic_effort_for(profile_effort: str | None) -> AnthropicEffort | None:
+    if profile_effort in _ANTHROPIC_EFFORTS:
+        return profile_effort
+    return None
+
+
+def fireworks_reasoning_effort_for(profile_effort: str | None) -> FireworksReasoningEffort | None:
+    """Map profile effort to a Fireworks ``reasoning_effort`` value.
+
+    Fireworks' OpenAI-compatible API accepts ``reasoning_effort`` on its reasoning
+    models. ``none`` disables reasoning; ``xhigh``/``max`` are only honored by models
+    that advertise them. The per-model ``efforts`` lists in the registry gate which
+    values can actually reach this function.
+    """
+    if profile_effort == "none":
+        return "none"
+    if profile_effort == "low":
+        return "low"
+    if profile_effort == "medium":
+        return "medium"
+    if profile_effort == "high":
+        return "high"
+    if profile_effort == "xhigh":
+        return "xhigh"
+    if profile_effort == "max":
+        return "max"
+    return None
+
+
+def google_thinking_level_for(profile_effort: str | None) -> GoogleThinkingLevel | None:
+    """Map profile effort to Gemini 3+ ``thinking_level``."""
+    if profile_effort in ("minimal", "none"):
+        return "minimal"
+    if profile_effort == "low":
+        return "low"
+    if profile_effort == "medium":
+        return "medium"
+    if profile_effort in ("high", "xhigh", "max"):
+        return "high"
+    return None
+
+
+def provider_model_kwargs(
+    model_id: str,
+    profile_effort: str | None,
+    *,
+    max_tokens: int,
+    openai_reasoning_default: OpenAIReasoning | None = None,
+) -> ModelKwargs:
+    """Build provider-specific kwargs for ``make_model`` from a model id and effort."""
+    kwargs: ModelKwargs = {"max_tokens": max_tokens}
+    if model_id.startswith("openai:"):
+        reasoning = openai_reasoning_for(profile_effort)
+        if reasoning is not None:
+            kwargs["reasoning"] = reasoning
+        elif openai_reasoning_default is not None:
+            kwargs["reasoning"] = openai_reasoning_default
+    elif model_id.startswith("anthropic:"):
+        thinking = anthropic_thinking_for(profile_effort)
+        if thinking is not None:
+            kwargs["thinking"] = thinking
+        effort = anthropic_effort_for(profile_effort)
+        if effort is not None:
+            kwargs["effort"] = effort
+    elif model_id.startswith("google_genai:") and is_gemini_3_family(model_id):
+        thinking_level = google_thinking_level_for(profile_effort)
+        if thinking_level is not None:
+            kwargs["thinking_level"] = thinking_level
+    elif model_id.startswith("fireworks:"):
+        effort = fireworks_reasoning_effort_for(profile_effort)
+        if effort is not None:
+            kwargs["model_kwargs"] = {"reasoning_effort": effort}
+    return kwargs

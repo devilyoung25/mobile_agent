@@ -45,7 +45,7 @@ from .oauth import (
     require_session,
     sanitize_redirect_to,
 )
-from .options import SUPPORTED_MODELS
+from .options import supported_models
 from .profiles import (
     ProfileUpdate,
     get_profile,
@@ -292,7 +292,7 @@ async def options() -> dict[str, Any]:
     agent_model, agent_effort = await get_team_default_model("agent")
     subagent_model, subagent_effort = await get_team_default_subagent_model("agent")
     return {
-        "models": SUPPORTED_MODELS,
+        "models": supported_models(),
         "default_agent_model": agent_model,
         "default_agent_reasoning_effort": agent_effort,
         "default_agent_subagent_model": subagent_model,

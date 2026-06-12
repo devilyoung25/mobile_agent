@@ -36,7 +36,7 @@ from .dashboard.agent_overrides import (
     resolve_actor_id,
 )
 from .dashboard.agent_usage import record_agent_thread_usage
-from .dashboard.options import DEFAULT_MODEL_ID, SUPPORTED_MODEL_IDS, model_supports_effort
+from .dashboard.options import is_supported_model, model_supports_effort
 from .dashboard.team_settings import get_team_default_model_pair, get_team_default_repo
 from .integrations.azure_devops_mcp import load_azure_devops_read_only_tools
 from .integrations.datadog_mcp import load_datadog_tools
@@ -286,7 +286,6 @@ async def ensure_sandbox_for_thread(thread_id: str) -> SandboxBackendProtocol:
     return sandbox_backend
 
 
-DEFAULT_LLM_MODEL_ID = DEFAULT_MODEL_ID
 DEFAULT_LLM_MAX_TOKENS = 64_000
 DEFAULT_RECURSION_LIMIT = 9_999
 MODEL_CALL_RECURSION_LIMIT = 5_000  # ~half the recursion limit to account for tool calls
@@ -404,7 +403,7 @@ async def get_agent(config: RunnableConfig) -> Pregel:
     per_thread_effort = configurable.get("agent_effort")
     if (
         isinstance(per_thread_model, str)
-        and per_thread_model in SUPPORTED_MODEL_IDS
+        and is_supported_model(per_thread_model)
         and isinstance(per_thread_effort, str)
         and model_supports_effort(per_thread_model, per_thread_effort)
     ):

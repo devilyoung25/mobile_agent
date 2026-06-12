@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from ..utils.thread_ops import langgraph_client
 from .agent_instructions import normalize_repo_full_name
-from .options import SUPPORTED_MODEL_IDS, model_supports_effort
+from .options import is_supported_model, model_supports_effort
 from .profiles import get_profile
 from .thread_api import _agent_version_metadata, _now_ms, _resolve_run_email
 
@@ -64,7 +64,7 @@ def _now_iso() -> str:
 def _normalize_model_choice(
     model_id: str | None, effort: str | None
 ) -> tuple[str | None, str | None]:
-    if not isinstance(model_id, str) or model_id not in SUPPORTED_MODEL_IDS:
+    if not isinstance(model_id, str) or not is_supported_model(model_id):
         return None, None
     if not isinstance(effort, str) or not model_supports_effort(model_id, effort):
         return None, None

@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 from langgraph_sdk import get_client
 
-from .options import SUPPORTED_MODEL_IDS, model_supports_effort, provider_fallback_pair
+from .options import is_supported_model, model_supports_effort, provider_fallback_pair
 from .profiles import PROFILES_NAMESPACE
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ def _normalize_profile_model_pair(
     effort = profile.get(effort_key)
     if (
         isinstance(model_id, str)
-        and model_id in SUPPORTED_MODEL_IDS
+        and is_supported_model(model_id)
         and isinstance(effort, str)
         and model_supports_effort(model_id, effort)
     ):

@@ -4,7 +4,6 @@ import pytest
 
 from agent.dashboard.agent_overrides import normalize_profile_overrides
 from agent.dashboard.options import (
-    DEFAULT_MODEL_ID,
     default_model_pair,
     provider_fallback_pair,
 )
@@ -78,4 +77,4 @@ def test_profile_unknown_provider_defers_to_team_default() -> None:
 
 def test_global_default_is_supported() -> None:
     model, _ = default_model_pair()
-    assert model == DEFAULT_MODEL_ID
+    assert model == "anthropic:claude-opus-4-8"

@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
+    "on-model-launcher",
     "deepagents==0.6.8",
     "fastapi>=0.136.3",
     "uvicorn>=0.48.0",
@@ -38,6 +39,12 @@ dev = [
     "ruff>=0.15.15",
     "Pygments>=2.20.0",
 ]
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+on-model-launcher = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

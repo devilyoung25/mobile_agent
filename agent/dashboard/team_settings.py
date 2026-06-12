@@ -16,8 +16,8 @@ from langgraph_sdk import get_client
 from pydantic import BaseModel, field_validator, model_validator
 
 from .options import (
-    SUPPORTED_MODEL_IDS,
     default_model_pair,
+    is_supported_model,
     model_supports_effort,
     provider_fallback_pair,
 )
@@ -95,7 +95,7 @@ def _validate_model_effort_pair(model: str | None, effort: str | None, role: str
         return
     if model is None:
         raise ValueError(f"{role} reasoning effort set without a model")
-    if model not in SUPPORTED_MODEL_IDS:
+    if not is_supported_model(model):
         raise ValueError(f"unsupported {role} model: {model}")
     if effort is None or not model_supports_effort(model, effort):
         raise ValueError(f"effort {effort!r} not supported by {role} model {model!r}")
@@ -276,7 +276,7 @@ def _resolve_default_pair(model: object, effort: object) -> tuple[str, str]:
     if (
         isinstance(model, str)
         and isinstance(effort, str)
-        and model in SUPPORTED_MODEL_IDS
+        and is_supported_model(model)
         and model_supports_effort(model, effort)
     ):
         return model, effort

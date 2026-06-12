@@ -24,7 +24,7 @@ from ..utils.thread_ops import (
     queue_message_for_thread,
 )
 from .agent_overrides import normalize_profile_overrides
-from .options import SUPPORTED_MODEL_IDS, model_supports_effort, model_supports_images
+from .options import is_supported_model, model_supports_effort, model_supports_images
 from .profiles import get_profile
 from .team_settings import get_team_default_model
 
@@ -112,7 +112,7 @@ class ThreadMessageBody(BaseModel):
 def _normalize_model_choice(
     model_id: str | None, effort: str | None
 ) -> tuple[str | None, str | None]:
-    if not isinstance(model_id, str) or model_id not in SUPPORTED_MODEL_IDS:
+    if not isinstance(model_id, str) or not is_supported_model(model_id):
         return None, None
     if not isinstance(effort, str) or not model_supports_effort(model_id, effort):
         return None, None
@@ -211,7 +211,7 @@ def _thread_source(metadata: dict[str, Any]) -> str:
 def _metadata_model_id(metadata: dict[str, Any]) -> str | None:
     for key in ("resolved_model", "model"):
         model = metadata.get(key)
-        if isinstance(model, str) and model in SUPPORTED_MODEL_IDS:
+        if isinstance(model, str) and is_supported_model(model):
             return model
     return None
 

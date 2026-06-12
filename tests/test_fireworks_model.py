@@ -1,6 +1,6 @@
 import pytest
 
-from agent.dashboard.options import SUPPORTED_MODELS
+from agent.dashboard.options import supported_models
 from agent.utils.model import (
     fallback_model_id_for,
     fireworks_reasoning_effort_for,
@@ -49,7 +49,7 @@ def test_fireworks_has_no_cross_provider_fallback() -> None:
 
 @pytest.mark.parametrize(
     ("model_id", "effort"),
-    [(m["id"], effort) for m in SUPPORTED_MODELS for effort in m["efforts"]],
+    [(m["id"], effort) for m in supported_models() for effort in m["efforts"]],
 )
 def test_every_supported_effort_translates_to_a_reasoning_kwarg(model_id: str, effort: str) -> None:
     """Each effort surfaced in the UI must map to a provider reasoning param."""

@@ -1,6 +1,6 @@
-"""Model construction — re-exported from the model-launcher package."""
+"""Brand-independent model launcher: registry + chat-model construction."""
 
-from model_launcher import (
+from .kwargs import (
     DEFAULT_LLM_REASONING,
     DEFAULT_MAX_RETRIES,
     AnthropicEffort,
@@ -19,6 +19,16 @@ from model_launcher import (
     openai_reasoning_for,
     provider_model_kwargs,
 )
+from .registry import (
+    ModelOption,
+    default_model_id,
+    default_model_pair,
+    model_supports_effort,
+    model_supports_images,
+    provider_fallback_pair,
+    supported_model_ids,
+    supported_models,
+)
 
 __all__ = [
     "DEFAULT_LLM_REASONING",
@@ -27,15 +37,23 @@ __all__ = [
     "AnthropicThinking",
     "GoogleThinkingLevel",
     "ModelKwargs",
+    "ModelOption",
     "OpenAIReasoning",
     "anthropic_effort_for",
     "anthropic_thinking_for",
+    "default_model_id",
+    "default_model_pair",
     "fallback_model_id_for",
     "fireworks_reasoning_effort_for",
     "google_thinking_level_for",
     "is_gemini_3_family",
     "is_ollama_model_id",
     "make_model",
+    "model_supports_effort",
+    "model_supports_images",
     "openai_reasoning_for",
+    "provider_fallback_pair",
     "provider_model_kwargs",
+    "supported_model_ids",
+    "supported_models",
 ]

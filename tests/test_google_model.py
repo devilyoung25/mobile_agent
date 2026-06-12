@@ -1,4 +1,4 @@
-from agent.dashboard.options import SUPPORTED_MODELS, provider_fallback_pair
+from agent.dashboard.options import provider_fallback_pair, supported_models
 from agent.utils.model import (
     google_thinking_level_for,
     is_gemini_3_family,
@@ -20,7 +20,7 @@ def test_google_thinking_level_maps_effort() -> None:
 
 
 def test_gemini_35_flash_is_supported_with_documented_efforts() -> None:
-    gemini = next(m for m in SUPPORTED_MODELS if m["id"] == "google_genai:gemini-3.5-flash")
+    gemini = next(m for m in supported_models() if m["id"] == "google_genai:gemini-3.5-flash")
     assert gemini["label"] == "Gemini 3.5 Flash"
     assert gemini["efforts"] == ["minimal", "low", "medium", "high"]
     assert gemini["default_effort"] == "medium"

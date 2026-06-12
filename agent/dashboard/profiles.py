@@ -20,7 +20,7 @@ import httpx
 from langgraph_sdk import get_client
 from pydantic import BaseModel, field_validator
 
-from .options import SUPPORTED_MODEL_IDS, model_supports_effort
+from .options import is_supported_model, model_supports_effort
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class ProfileUpdate(BaseModel):
     @field_validator("default_model")
     @classmethod
     def _model_supported(cls, v: str) -> str:
-        if v not in SUPPORTED_MODEL_IDS:
+        if not is_supported_model(v):
             raise ValueError(f"unsupported model: {v}")
         return v
 
@@ -55,7 +55,7 @@ class ProfileUpdate(BaseModel):
             return
         if self.default_subagent_model is None:
             raise ValueError("subagent reasoning effort set without a model")
-        if self.default_subagent_model not in SUPPORTED_MODEL_IDS:
+        if not is_supported_model(self.default_subagent_model):
             raise ValueError(f"unsupported subagent model: {self.default_subagent_model}")
         if self.subagent_reasoning_effort is None or not model_supports_effort(
             self.default_subagent_model,
