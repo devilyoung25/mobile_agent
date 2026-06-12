@@ -12,8 +12,8 @@ members = [
     "on-identity-entra",
     "on-integration-azure-devops",
     "on-mcp-toolset",
+    "on-mobile-agent",
     "on-model-launcher",
-    "open-swe-agent",
 ]
 
 [[package]]
@@ -1998,7 +1998,7 @@ wheels = [
 [[package]]
 name = "on-core"
 version = "0.1.0"
-source = { editable = "engine/open-swe-core" }
+source = { editable = "engine/agent-engine-core" }
 dependencies = [
     { name = "anthropic" },
     { name = "deepagents" },
@@ -2070,22 +2070,7 @@ requires-dist = [
 ]
 
 [[package]]
-name = "on-model-launcher"
-version = "0.1.0"
-source = { editable = "packages/model-launcher" }
-dependencies = [
-    { name = "langchain" },
-    { name = "langchain-openai" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "langchain", specifier = ">=1.3.4" },
-    { name = "langchain-openai", specifier = ">=1.2.2" },
-]
-
-[[package]]
-name = "open-swe-agent"
+name = "on-mobile-agent"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
@@ -2148,7 +2133,7 @@ requires-dist = [
     { name = "langgraph-sdk", specifier = ">=0.4.2" },
     { name = "langsmith", specifier = "==0.8.11" },
     { name = "markdownify", specifier = ">=1.2.2" },
-    { name = "on-core", editable = "engine/open-swe-core" },
+    { name = "on-core", editable = "engine/agent-engine-core" },
     { name = "on-identity-entra", editable = "packages/identity-entra" },
     { name = "on-integration-azure-devops", editable = "packages/integration-azure-devops" },
     { name = "on-mcp-toolset", editable = "packages/mcp-toolset" },
@@ -2161,6 +2146,21 @@ requires-dist = [
     { name = "uvicorn", specifier = ">=0.48.0" },
 ]
 provides-extras = ["dev"]
+
+[[package]]
+name = "on-model-launcher"
+version = "0.1.0"
+source = { editable = "packages/model-launcher" }
+dependencies = [
+    { name = "langchain" },
+    { name = "langchain-openai" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "langchain", specifier = ">=1.3.4" },
+    { name = "langchain-openai", specifier = ">=1.2.2" },
+]
 
 [[package]]
 name = "openai"

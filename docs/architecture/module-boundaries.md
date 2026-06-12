@@ -7,7 +7,7 @@ and provider-neutral; attach enterprise systems through adapters.
 
 ```text
 engine/
-  open-swe-core/              # Engine package: prompt, assembly, middleware, sandbox state.
+  agent-engine-core/          # Engine package: prompt, assembly, middleware, sandbox state.
 
 packages/
   model-launcher/             # Model registry and model construction.
@@ -30,7 +30,7 @@ agent/
 
 ## Rules
 
-- `engine/open-swe-core` must not know about Microsoft Entra, Azure DevOps,
+- `engine/agent-engine-core` must not know about Microsoft Entra, Azure DevOps,
   GitHub, Slack, Linear, or any concrete model provider.
 - MCP integrations live outside the engine and expose tools through
   `mcp-toolset` policies.

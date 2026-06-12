@@ -1,7 +1,7 @@
 [project]
-name = "open-swe-agent"
+name = "on-mobile-agent"
 version = "0.1.0"
-description = "Open SWE Agent - Python agent for automating software engineering tasks"
+description = "ON Mobile Agent - enterprise AgentEngine for mobile SDLC workflows"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

@@ -6,7 +6,7 @@ from langchain_core.messages import AnyMessage, ToolMessage
 from langgraph.config import get_config
 from langgraph.runtime import Runtime
 
-DASHBOARD_HANDOFF_MARKER = "[Open SWE Web handoff]"
+DASHBOARD_HANDOFF_MARKER = "[ON Mobile Agent Web handoff]"
 
 _DASHBOARD_SOURCE = "dashboard"
 

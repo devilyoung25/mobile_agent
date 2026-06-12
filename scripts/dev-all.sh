@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-LOG_DIR="${TMPDIR:-/tmp}/open-swe-dev-logs"
+LOG_DIR="${TMPDIR:-/tmp}/on-mobile-agent-dev-logs"
 
 mkdir -p "$LOG_DIR"
 rm -f "$LOG_DIR"/*.log
@@ -63,7 +63,7 @@ trap 'cleanup $?' EXIT
 trap 'cleanup 130' INT
 trap 'cleanup 143' TERM
 
-echo "🚀 Iniciando OpenSWE dev stack..."
+echo "🚀 Iniciando ON Mobile Agent dev stack..."
 echo "📝 Logs en: $LOG_DIR"
 echo ""
 

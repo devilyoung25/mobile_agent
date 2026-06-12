@@ -1,4 +1,4 @@
-"""Dashboard backend: OAuth, profiles, and admin endpoints for the open-swe UI."""
+"""Dashboard backend: OAuth, profiles, and admin endpoints for ON Mobile Agent."""
 
 from .routes import router
 
