@@ -80,6 +80,25 @@ wait_for_port() {
   exit 1
 }
 
+print_studio_url() {
+  local studio_url
+  studio_url="$(
+    sed $'s/\x1b\\[[0-9;]*m//g' "$LOG_DIR/backend.log" \
+      | grep -Eo 'https://smith\.langchain\.com/studio/[^[:space:]]+' \
+      | tail -1 || true
+  )"
+
+  if [[ -n "$studio_url" ]]; then
+    echo "LangGraph Studio: $studio_url"
+  elif grep -q -- "--tunnel" <<< "$BACKEND_CMD"; then
+    echo "⚠️  No encontré URL de Studio en backend.log todavía."
+  fi
+
+  if grep -q "Tunnel server stopped" "$LOG_DIR/backend.log"; then
+    echo "⚠️  El tunnel de LangGraph se detuvo. Studio remoto no podrá usar localhost:2024."
+  fi
+}
+
 trap 'cleanup $?' EXIT
 trap 'cleanup 130' INT
 trap 'cleanup 143' TERM
@@ -124,6 +143,8 @@ PIDS+=("$!")
 echo "Validando servicios..."
 wait_for_port "Backend" 2024 "$LOG_DIR/backend.log"
 wait_for_port "Frontend" 3000 "$LOG_DIR/frontend.log"
+sleep 3
+print_studio_url
 
 echo ""
 echo "✅ Todo iniciado"
