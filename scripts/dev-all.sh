@@ -10,7 +10,8 @@ rm -f "$LOG_DIR"/*.log
 cd "$ROOT_DIR"
 
 NGROK_CMD="${NGROK_CMD:-ngrok http 2024}"
-BACKEND_CMD="${BACKEND_CMD:-uv run langgraph dev --no-browser --no-reload --port 2024}"
+BACKEND_FLAGS="${BACKEND_FLAGS:---no-browser --no-reload --port 2024 --tunnel}"
+BACKEND_CMD="${BACKEND_CMD:-uv run langgraph dev $BACKEND_FLAGS}"
 FRONTEND_CMD="${FRONTEND_CMD:-cd apps/dashboard && bun run dev -- --strictPort}"
 OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
 DEV_ALL_KILL_PORTS="${DEV_ALL_KILL_PORTS:-0}"
@@ -59,6 +60,26 @@ require_free_port() {
   exit 1
 }
 
+wait_for_port() {
+  local name="$1"
+  local port="$2"
+  local log_file="$3"
+  local pids
+
+  for i in {1..60}; do
+    pids="$(port_pids "$port")"
+    if [[ -n "$pids" ]]; then
+      echo "✅ $name listo en puerto $port"
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "❌ $name no abrió el puerto $port. Últimas líneas de log:"
+  tail -80 "$log_file" || true
+  exit 1
+}
+
 trap 'cleanup $?' EXIT
 trap 'cleanup 130' INT
 trap 'cleanup 143' TERM
@@ -99,6 +120,10 @@ PIDS+=("$!")
 echo "4/4 Iniciando frontend..."
 bash -lc "$FRONTEND_CMD" > "$LOG_DIR/frontend.log" 2>&1 &
 PIDS+=("$!")
+
+echo "Validando servicios..."
+wait_for_port "Backend" 2024 "$LOG_DIR/backend.log"
+wait_for_port "Frontend" 3000 "$LOG_DIR/frontend.log"
 
 echo ""
 echo "✅ Todo iniciado"
