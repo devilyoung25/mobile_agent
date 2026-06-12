@@ -28,7 +28,7 @@ export function useRepos() {
   // Azure DevOps repositories will be wired through the MCP toolset later.
   return useQuery({
     queryKey: ["repos"],
-    queryFn: async () => ({ installations: [], repositories: [] }),
+    queryFn: () => ({ installations: [], repositories: [] }),
     staleTime: Infinity,
   })
 }

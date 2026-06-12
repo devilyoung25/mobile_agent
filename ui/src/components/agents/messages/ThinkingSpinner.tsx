@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 // Video-game-loading-screen energy, but make it Android dev. The agent shows a
 // random one of these while it thinks — equal parts Gradle trauma and droid love.
-const BUSY_TEXTS: { present: string; past: string }[] = [
+const BUSY_TEXTS: Array<{ present: string; past: string }> = [
   { present: "waiting for Gradle daemon...", past: "Waited for Gradle" },
   { present: "downloading the internet (Gradle)...", past: "Downloaded the internet" },
   { present: "resolving dependencies...", past: "Resolved dependencies" },
