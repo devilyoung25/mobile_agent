@@ -3,7 +3,7 @@ import { StreamProvider } from "@langchain/react";
 import { overrideFetchImplementation } from "@langchain/langgraph-sdk";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { agentsApi } from "./api";
+import { AgentsApiError, agentsApi } from "./api";
 import { agentThreadKeys } from "./queries";
 import type { ReactNode } from "react";
 
@@ -80,6 +80,27 @@ export function AgentThreadStreamProvider({
     const id = threadIdRef.current;
     if (id) {
       void queryClient.invalidateQueries({ queryKey: agentThreadKeys.detail(id) });
+      void (async () => {
+        try {
+          const queued = await agentsApi.getQueuedMessages(id);
+          if (queued.count > 0) {
+            const continued = await agentsApi.continueQueuedMessages(id);
+            if (continued.status !== "directed") {
+              window.dispatchEvent(
+                new CustomEvent("agent-thread-queued-continued", {
+                  detail: { threadId: id },
+                }),
+              );
+            }
+            void queryClient.invalidateQueries({ queryKey: agentThreadKeys.detail(id) });
+            void queryClient.invalidateQueries({ queryKey: agentThreadKeys.all, exact: true });
+          }
+        } catch (error) {
+          if (!(error instanceof AgentsApiError) || error.status !== 409) {
+            console.warn("Could not continue queued follow-up messages", error);
+          }
+        }
+      })();
     }
     void queryClient.invalidateQueries({ queryKey: agentThreadKeys.all, exact: true });
   }, [queryClient]);

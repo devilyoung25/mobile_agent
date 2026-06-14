@@ -19,6 +19,24 @@ export interface ThreadMessageRequest {
   effort?: string | null
 }
 
+export interface QueuedThreadMessage {
+  id: string
+  text: string
+  image_count: number
+  has_images: boolean
+}
+
+export interface QueuedThreadMessagesPayload {
+  count: number
+  messages: Array<QueuedThreadMessage>
+}
+
+export interface ContinueQueuedThreadPayload {
+  status: "started" | "empty" | "directed"
+  run_id: string | null
+  queued: QueuedThreadMessagesPayload
+}
+
 export interface ScheduleCreateRequest {
   prompt: string
   schedule: string
@@ -129,6 +147,42 @@ export const agentsApi = {
         method: "POST",
         body: JSON.stringify(body),
       }
+    ),
+  getQueuedMessages: (threadId: string) =>
+    agentsRequest<QueuedThreadMessagesPayload>(
+      `/threads/${encodeURIComponent(threadId)}/queued`
+    ),
+  continueQueuedMessages: (threadId: string) =>
+    agentsRequest<ContinueQueuedThreadPayload>(
+      `/threads/${encodeURIComponent(threadId)}/queued/continue`,
+      { method: "POST" }
+    ),
+  // Resume a human-approval interrupt by creating a run with a LangGraph
+  // Command(resume=...). The frontend SDK's `respond()` over the stateless SSE
+  // `/commands` transport can't validate the interrupt ("already-consumed"), so
+  // we POST the resume command to the proxied runs endpoint instead.
+  resumeInterrupt: (threadId: string, decisions: Array<{ type: "approve" | "reject" }>) =>
+    agentsRequest<{ run_id?: string | null }>(
+      `/threads/${encodeURIComponent(threadId)}/resume`,
+      {
+        method: "POST",
+        body: JSON.stringify({ decisions }),
+      }
+    ),
+  clearQueuedMessages: (threadId: string) =>
+    agentsRequest<QueuedThreadMessagesPayload>(
+      `/threads/${encodeURIComponent(threadId)}/queued`,
+      { method: "DELETE" }
+    ),
+  deleteQueuedMessage: (threadId: string, messageId: string) =>
+    agentsRequest<QueuedThreadMessagesPayload>(
+      `/threads/${encodeURIComponent(threadId)}/queued/${encodeURIComponent(messageId)}`,
+      { method: "DELETE" }
+    ),
+  directQueuedMessage: (threadId: string, messageId: string) =>
+    agentsRequest<ContinueQueuedThreadPayload>(
+      `/threads/${encodeURIComponent(threadId)}/queued/${encodeURIComponent(messageId)}/direct`,
+      { method: "POST" }
     ),
   cancelThread: (threadId: string) =>
     agentsRequest<AgentThread>(

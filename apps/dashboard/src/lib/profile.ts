@@ -43,6 +43,25 @@ export function useRepos() {
   })
 }
 
+export function useWorkspaces() {
+  const session = useSession()
+  return useQuery({
+    queryKey: ["workspaces"],
+    queryFn: api.workspaces,
+    enabled: !!session.data,
+  })
+}
+
+export function usePickWorkspace() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.pickWorkspace,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["workspaces"] })
+    },
+  })
+}
+
 export function useSaveProfile() {
   const qc = useQueryClient()
   return useMutation({

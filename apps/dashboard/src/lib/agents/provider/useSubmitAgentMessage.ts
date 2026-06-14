@@ -4,6 +4,7 @@ import { useStreamContext as useAgentThreadStream } from "@langchain/react";
 import type { SendAgentMessageVariables } from "@/lib/agents/queries";
 import { AgentsApiError, agentsApi } from "@/lib/agents/api";
 import { agentThreadKeys } from "@/lib/agents/queries";
+import type { ImageChunk } from "@/lib/agents/types";
 
 /**
  * Construct the message content for the LangGraph run.
@@ -29,9 +30,9 @@ function messageContent(vars: SendAgentMessageVariables) {
  * When the thread is idle, submits a new run via the stream commands endpoint.
  * When a run is already in flight (`stream.isLoading`), posts to the dashboard
  * `/messages` endpoint instead of using LangGraph `multitaskStrategy: "enqueue"`.
- * That endpoint writes to the thread store; `check_message_queue_before_model`
- * injects the message into the *current* run before the next model call — the
- * same mid-run follow-up path used by Slack, Linear, and GitHub webhooks.
+ * That endpoint writes to the thread store. Normal queued messages wait for
+ * run completion; the prompt bar's explicit "Dirigir" action marks one queued
+ * message for injection before the next model call.
  * 
  * @param threadId - The ID of the thread to submit the message to.
  * @returns The mutation object.
@@ -42,6 +43,10 @@ export function useSubmitAgentMessage(threadId: string) {
 
   return useMutation({
     mutationFn: async (vars: SendAgentMessageVariables) => {
+      const queuedMessage = {
+        content: vars.content,
+        images: vars.images ?? ([] as Array<ImageChunk>),
+      };
       const queue = () =>
         agentsApi.queueMessage(threadId, {
           content: vars.content,
@@ -52,12 +57,12 @@ export function useSubmitAgentMessage(threadId: string) {
 
       if (stream.isLoading) {
         await queue();
-        return;
+        return { queued: true, message: queuedMessage };
       }
 
       try {
         await queue();
-        return;
+        return { queued: true, message: queuedMessage };
       } catch (error) {
         if (!(error instanceof AgentsApiError) || error.status !== 409) {
           throw error;
@@ -77,6 +82,7 @@ export function useSubmitAgentMessage(threadId: string) {
         { messages: [{ type: "human", content: messageContent(vars) }] },
         { config },
       );
+      return { queued: false, message: queuedMessage };
     },
     onSuccess: () => {
       queryClient.setQueryData(agentThreadKeys.detail(threadId), (prev) =>

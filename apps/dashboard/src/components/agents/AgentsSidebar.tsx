@@ -12,13 +12,15 @@ import {
   GitPullRequestIcon,
   LightningIcon,
   PlusIcon,
+  FolderIcon,
+  FolderPlusIcon,
   TrashIcon,
   TreeStructureIcon,
   XIcon,
 } from "@phosphor-icons/react"
 import { IoLogoGithub, IoLogoSlack } from "react-icons/io5"
 import { SiLinear } from "react-icons/si"
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { ComponentType, SVGProps } from "react"
 
 import type { SessionUser } from "@/lib/api"
@@ -37,6 +39,7 @@ import {
   useDeleteAgentThread,
   useSeedAgentThreadDetails,
 } from "@/lib/agents/queries"
+import { usePickWorkspace, useWorkspaces } from "@/lib/profile"
 import { cn } from "@/lib/utils"
 
 type SourceIcon = ComponentType<SVGProps<SVGSVGElement>>
@@ -87,12 +90,61 @@ const NAV = [
   { to: "/my-settings", label: "Panel", icon: ChartLineUpIcon },
 ] as const
 
+export const SELECTED_WORKSPACE_STORAGE_KEY =
+  "on-mobile-agent.selected-workspace-id"
+export const WORKSPACE_SELECTION_EVENT = "on-mobile-agent:workspace-selected"
+
 export function AgentsSidebar({ user, activeThreadId }: AgentsSidebarProps) {
   const threadsQuery = useAgentThreads()
   const threads = threadsQuery.data ?? []
+  const workspacesQuery = useWorkspaces()
+  const pickWorkspace = usePickWorkspace()
   useSeedAgentThreadDetails(threads, activeThreadId)
-  const groups = groupThreads(threads)
   const layout = useSidebarLayout()
+  const workspaces = workspacesQuery.data?.workspaces ?? []
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(
+    () =>
+      typeof window === "undefined"
+        ? null
+        : window.localStorage.getItem(SELECTED_WORKSPACE_STORAGE_KEY)
+  )
+  const selectedWorkspace = workspaces.find(
+    (workspace) => workspace.id === selectedWorkspaceId
+  )
+  const visibleThreads = useMemo(
+    () =>
+      selectedWorkspaceId
+        ? threads.filter((thread) => thread.workspaceId === selectedWorkspaceId)
+        : threads.filter((thread) => !thread.workspaceId),
+    [selectedWorkspaceId, threads]
+  )
+  const groups = groupThreads(visibleThreads)
+
+  useEffect(() => {
+    const syncSelectedWorkspace = () => {
+      setSelectedWorkspaceId(
+        window.localStorage.getItem(SELECTED_WORKSPACE_STORAGE_KEY)
+      )
+    }
+    window.addEventListener(WORKSPACE_SELECTION_EVENT, syncSelectedWorkspace)
+    window.addEventListener("storage", syncSelectedWorkspace)
+    return () => {
+      window.removeEventListener(WORKSPACE_SELECTION_EVENT, syncSelectedWorkspace)
+      window.removeEventListener("storage", syncSelectedWorkspace)
+    }
+  }, [])
+
+  const onPickWorkspace = () => {
+    if (pickWorkspace.isPending) return
+    pickWorkspace.reset()
+    pickWorkspace.mutate()
+  }
+
+  const clearWorkspaceSelection = () => {
+    window.localStorage.removeItem(SELECTED_WORKSPACE_STORAGE_KEY)
+    window.dispatchEvent(new Event(WORKSPACE_SELECTION_EVENT))
+    layout.closeOnMobile()
+  }
 
   return (
     <SidebarFrame
@@ -109,7 +161,7 @@ export function AgentsSidebar({ user, activeThreadId }: AgentsSidebarProps) {
       <div className="px-2 pb-1">
         <Link
           to="/agents"
-          onClick={layout.closeOnMobile}
+          onClick={clearWorkspaceSelection}
           className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--ui-text)] transition-colors hover:bg-[var(--ui-sidebar-hover)]"
         >
           <PlusIcon className="size-4" />
@@ -139,6 +191,33 @@ export function AgentsSidebar({ user, activeThreadId }: AgentsSidebarProps) {
       </nav>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+        <ChatScopeSection
+          isSelected={!selectedWorkspaceId}
+          threadCount={threads.filter((thread) => !thread.workspaceId).length}
+          onSelect={clearWorkspaceSelection}
+        />
+        <WorkspaceSection
+          workspaces={workspaces}
+          loading={workspacesQuery.isLoading}
+          picking={pickWorkspace.isPending}
+          error={
+            pickWorkspace.isPending
+              ? null
+              : pickWorkspace.error instanceof Error
+              ? pickWorkspace.error.message
+              : workspacesQuery.error instanceof Error
+                ? workspacesQuery.error.message
+                : null
+          }
+          onPickWorkspace={onPickWorkspace}
+          onNavigate={layout.closeOnMobile}
+          selectedWorkspaceId={selectedWorkspaceId}
+        />
+        <div className="px-2 py-1 text-[10px] font-semibold tracking-wide text-[var(--ui-text-dim)] uppercase">
+          {selectedWorkspace
+            ? `Chats de ${selectedWorkspace.label}`
+            : "Chats corrientes"}
+        </div>
         <ThreadGroup
           label="Hoy"
           threads={groups.today}
@@ -172,6 +251,163 @@ export function AgentsSidebar({ user, activeThreadId }: AgentsSidebarProps) {
       </div>
     </SidebarFrame>
   )
+}
+
+function ChatScopeSection({
+  isSelected,
+  threadCount,
+  onSelect,
+}: {
+  isSelected: boolean
+  threadCount: number
+  onSelect: () => void
+}) {
+  return (
+    <div className="mb-4">
+      <div className="px-2 py-1 text-[10px] font-semibold tracking-wide text-[var(--ui-text-dim)] uppercase">
+        Chats
+      </div>
+      <Link
+        to="/agents"
+        onClick={onSelect}
+        className={cn(
+          "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs transition-colors hover:bg-[var(--ui-sidebar-hover)] hover:text-[var(--ui-text)]",
+          isSelected
+            ? "bg-[var(--ui-sidebar-hover)] text-[var(--ui-text)]"
+            : "text-[var(--ui-text-muted)]"
+        )}
+      >
+        <ChatCircleIcon className="size-3.5 shrink-0 text-[var(--ui-text-dim)]" />
+        <span className="min-w-0 flex-1 truncate">Chats corrientes</span>
+        <span className="shrink-0 rounded bg-[var(--ui-panel-2)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-dim)]">
+          {threadCount}
+        </span>
+      </Link>
+    </div>
+  )
+}
+
+function WorkspaceSection({
+  workspaces,
+  loading,
+  picking,
+  error,
+  onPickWorkspace,
+  onNavigate,
+  selectedWorkspaceId,
+}: {
+  workspaces: Array<{
+    id: string
+    label: string
+    path: string
+    current_branch: string | null
+    is_dirty: boolean
+  }>
+  loading: boolean
+  picking: boolean
+  error: string | null
+  onPickWorkspace: () => void
+  onNavigate?: () => void
+  selectedWorkspaceId?: string | null
+}) {
+  return (
+    <div className="mb-4">
+      <div className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold tracking-wide text-[var(--ui-text-dim)] uppercase">
+        <span className="min-w-0 flex-1 truncate">Proyectos</span>
+        <button
+          type="button"
+          onClick={onPickWorkspace}
+          disabled={picking}
+          className="grid size-5 place-items-center rounded text-[var(--ui-text-dim)] transition-colors hover:bg-[var(--ui-sidebar-hover)] hover:text-[var(--ui-text)] disabled:opacity-50"
+          aria-label="Agregar proyecto local"
+          title="Usar una carpeta existente"
+        >
+          {picking ? (
+            <CircleNotchIcon className="size-3 animate-spin" />
+          ) : (
+            <FolderPlusIcon className="size-3.5" />
+          )}
+        </button>
+      </div>
+      {loading ? (
+        <div className="px-2 py-1 text-xs text-[var(--ui-text-dim)]">
+          Cargando proyectos...
+        </div>
+      ) : workspaces.length === 0 ? (
+        <button
+          type="button"
+          onClick={onPickWorkspace}
+          disabled={picking}
+          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-[var(--ui-text-dim)] transition-colors hover:bg-[var(--ui-sidebar-hover)] hover:text-[var(--ui-text)] disabled:opacity-50"
+        >
+          <FolderPlusIcon className="size-3.5 shrink-0" />
+          <span>Agregar carpeta local</span>
+        </button>
+      ) : (
+        <div className="space-y-0.5">
+          {workspaces.map((workspace) => (
+            <Link
+              key={workspace.id}
+              to="/agents"
+              onClick={() => {
+                window.localStorage.setItem(
+                  SELECTED_WORKSPACE_STORAGE_KEY,
+                  workspace.id
+                )
+                window.dispatchEvent(new Event(WORKSPACE_SELECTION_EVENT))
+                onNavigate?.()
+              }}
+              title={workspace.path}
+              className={cn(
+                "group flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs transition-colors hover:bg-[var(--ui-sidebar-hover)] hover:text-[var(--ui-text)]",
+                workspace.id === selectedWorkspaceId
+                  ? "bg-[var(--ui-sidebar-hover)] text-[var(--ui-text)]"
+                  : "text-[var(--ui-text-muted)]"
+              )}
+            >
+              <FolderIcon className="size-3.5 shrink-0 text-[var(--ui-text-dim)]" />
+              <span className="min-w-0 flex-1 truncate">{workspace.label}</span>
+              {workspace.current_branch && (
+                <span className="max-w-20 truncate rounded bg-[var(--ui-panel-2)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-dim)]">
+                  {workspace.current_branch}
+                </span>
+              )}
+              {workspace.is_dirty && (
+                <span
+                  className="size-1.5 shrink-0 rounded-full bg-[var(--ui-accent)]"
+                  aria-label="Cambios locales"
+                />
+              )}
+            </Link>
+          ))}
+        </div>
+      )}
+      {error && (
+        <div className="mt-1 px-2 text-[10px] leading-snug text-[var(--ui-danger)]">
+          {workspaceErrorLabel(error)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function workspaceErrorLabel(error: string): string {
+  if (error.startsWith("workspace_git_error:")) {
+    return "Selecciona una carpeta que sea un repositorio Git conectado a Azure DevOps."
+  }
+  const labels: Record<string, string> = {
+    workspace_picker_cancelled: "Selección cancelada.",
+    workspace_picker_disabled: "Selector de carpetas deshabilitado.",
+    workspace_picker_unsupported: "Selector no soportado en este sistema.",
+    workspace_path_not_directory: "La ruta seleccionada no es una carpeta.",
+    workspace_path_not_git_repo:
+      "Selecciona una carpeta que sea un repositorio Git.",
+    workspace_path_missing_origin:
+      "El repositorio seleccionado no tiene remote origin configurado.",
+    workspace_path_not_azure_repo:
+      "Selecciona un repositorio conectado a Azure DevOps.",
+  }
+  return labels[error] ?? error
 }
 
 function ThreadGroup({

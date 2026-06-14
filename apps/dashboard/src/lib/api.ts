@@ -186,6 +186,30 @@ export interface AzureUsagePayload {
   recent_builds: Array<AzureBuild>;
 }
 
+export interface Workspace {
+  id: string;
+  label: string;
+  path: string;
+  current_branch: string | null;
+  remote_url: string | null;
+  is_dirty: boolean;
+  azure_project?: string | null;
+  azure_repo?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface WorkspacesPayload {
+  workspaces: Array<Workspace>;
+}
+
+export interface WorkspaceCreate {
+  path: string;
+  label?: string | null;
+  azure_project?: string | null;
+  azure_repo?: string | null;
+}
+
 export interface Repository {
   /** Azure DevOps "<project>/<repo>" — the analogue of GitHub's owner/repo. */
   full_name: string;
@@ -275,6 +299,10 @@ export const api = {
     request<AzureUsagePayload>(
       `/azure/usage?project=${encodeURIComponent(project)}&period=${encodeURIComponent(period)}`,
     ),
+  workspaces: () => request<WorkspacesPayload>("/workspaces"),
+  registerWorkspace: (body: WorkspaceCreate) =>
+    request<Workspace>("/workspaces", { method: "POST", body: JSON.stringify(body) }),
+  pickWorkspace: () => request<Workspace>("/workspaces/pick", { method: "POST" }),
   listReviewStyles: () => request<Array<ReviewStyle>>("/review-styles"),
   createReviewStyle: (full_name: string) =>
     request<ReviewStyle>("/review-styles", {

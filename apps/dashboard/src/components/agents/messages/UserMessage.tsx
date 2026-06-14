@@ -49,7 +49,7 @@ export function UserMessage({ message }: { message: Message }) {
           </div>
         )}
         {text && (
-          <div className="inline-block max-w-full rounded-2xl bg-[var(--ui-accent-bubble)] overflow-hidden">
+          <div className="inline-block max-w-full overflow-hidden rounded-2xl bg-[var(--ui-accent-bubble)]">
             <div
               ref={textRef}
               onScroll={updateScrollIndicators}

@@ -119,6 +119,8 @@ export interface CreateAgentThreadVariables {
   images?: Array<ImageChunk>
   repo?: string | null
   repo_explicitly_none?: boolean
+  workspace_id?: string | null
+  workspace_label?: string | null
   model_id?: string | null
   effort?: string | null
 }
@@ -163,6 +165,8 @@ export function optimisticThread(
     createdAt: now,
     updatedAt: now,
     traceUrl: null,
+    workspaceId: vars.workspace_id ?? null,
+    workspaceLabel: vars.workspace_label ?? null,
     messages: message.chunks.length > 0 ? [message] : [],
   }
 }

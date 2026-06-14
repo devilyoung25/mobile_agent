@@ -1,4 +1,13 @@
-import { ArrowUp, ChevronDown, ImagePlus, LoaderCircle, X } from "lucide-react"
+import {
+  ArrowUp,
+  ChevronDown,
+  CornerDownRight,
+  ImagePlus,
+  LoaderCircle,
+  MoreHorizontal,
+  Trash2,
+  X,
+} from "lucide-react"
 import { StopIcon } from "@phosphor-icons/react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useStreamContext as useAgentThreadStream } from "@langchain/react"
@@ -17,6 +26,7 @@ import type { ImageChunk } from "@/lib/agents/types"
 import type { ModelSelection } from "@/lib/agents/provider/useModelOptions"
 import { RepoSelector } from "@/components/agents/RepoSelector"
 import { useIsInAgentThreadStream } from "@/lib/agents/provider/useIsInAgentThreadStream"
+import { agentsApi } from "@/lib/agents/api"
 import { agentThreadKeys } from "@/lib/agents/queries"
 import { formatModelSelection } from "@/lib/agents/provider/useModelOptions"
 import { IconButton } from "@/components/ui/button"
@@ -64,21 +74,35 @@ function StreamSubmitButton(props: SubmitButtonProps) {
   const handleStop = async () => {
     if (stopping) return
     setStopping(true)
+    const threadId = stream.threadId
     try {
+      // Stop = stop everything AND discard the queue (standard agent UX). Clear
+      // the queue BEFORE stopping so the stream provider's `onCompleted` sees an
+      // empty queue and doesn't auto-continue the next queued message.
+      if (threadId) {
+        try {
+          await agentsApi.clearQueuedMessages(threadId)
+        } catch {
+          /* best-effort; stopping still proceeds */
+        }
+      }
       await stream.stop()
-      const threadId = stream.threadId
       if (threadId) {
         queryClient.setQueryData(agentThreadKeys.detail(threadId), (prev) =>
           prev ? { ...prev, status: "interrupted" as const } : prev
         )
         void queryClient.invalidateQueries({ queryKey: agentThreadKeys.all, exact: true })
+        // Clear the queue rows in the thread view (it listens for this event).
+        window.dispatchEvent(
+          new CustomEvent("agent-thread-queued-continued", { detail: { threadId } })
+        )
       }
     } finally {
       setStopping(false)
     }
   }
 
-  if (!stream.isLoading) return <PlainSubmitButton {...props} />
+  if (!stream.isLoading || props.canSubmit) return <PlainSubmitButton {...props} />
 
   return (
     <IconButton
@@ -112,6 +136,10 @@ export interface CloudPromptBarProps {
   disabled?: boolean
   busy?: boolean
   onSubmit?: (value: string, images: Array<ImageChunk>) => void
+  queuedFollowUps?: Array<{ id: string; text: string; imageCount: number }>
+  onQueuedDiscard?: (id: string) => void | Promise<void>
+  onQueuedDirect?: (id: string) => void | Promise<void>
+  onQueuedClearAll?: () => void | Promise<void>
   models?: Array<ModelOption>
   selection?: ModelSelection | null
   onSelectionChange?: (next: ModelSelection) => void
@@ -154,6 +182,10 @@ export const CloudPromptBar = memo(function CloudPromptBarComponent({
   disabled = false,
   busy = false,
   onSubmit,
+  queuedFollowUps = [],
+  onQueuedDiscard,
+  onQueuedDirect,
+  onQueuedClearAll,
   models = [],
   selection = null,
   onSelectionChange,
@@ -165,6 +197,8 @@ export const CloudPromptBar = memo(function CloudPromptBarComponent({
   const [pendingImages, setPendingImages] = useState<Array<ImageChunk>>([])
   const [isDragOver, setIsDragOver] = useState(false)
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
+  const [queuedMenuOpen, setQueuedMenuOpen] = useState<string | null>(null)
+  const [queuedActionPending, setQueuedActionPending] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragDepthRef = useRef(0)
@@ -192,6 +226,46 @@ export const CloudPromptBar = memo(function CloudPromptBarComponent({
     setValue("")
     setPendingImages([])
   }, [canSubmit, onSubmit, pendingImages, value])
+
+  const handleQueuedAction = useCallback(
+    async (action?: () => void | Promise<void>) => {
+      if (!action || queuedActionPending) return
+      setQueuedActionPending(true)
+      try {
+        await action()
+      } catch (error) {
+        console.warn("Queued follow-up action failed", error)
+      } finally {
+        setQueuedActionPending(false)
+      }
+    },
+    [queuedActionPending]
+  )
+
+  const handleQueuedReplace = useCallback(async (id: string) => {
+    if (!canSubmit || !onQueuedDiscard || queuedActionPending) return
+    const trimmed = value.trim()
+    const images = pendingImages
+    setQueuedActionPending(true)
+    try {
+      await onQueuedDiscard(id)
+      onSubmit?.(trimmed, images)
+      setValue("")
+      setPendingImages([])
+      setQueuedMenuOpen(null)
+    } catch (error) {
+      console.warn("Queued follow-up replace failed", error)
+    } finally {
+      setQueuedActionPending(false)
+    }
+  }, [
+    canSubmit,
+    onQueuedDiscard,
+    onSubmit,
+    pendingImages,
+    queuedActionPending,
+    value,
+  ])
 
   useLayoutEffect(() => {
     const el = inputRef.current
@@ -307,6 +381,77 @@ export const CloudPromptBar = memo(function CloudPromptBarComponent({
           isDragOver && "border-[var(--ui-accent)]"
         )}
       >
+        {queuedFollowUps.length > 0 && (
+          <div className="mb-2 space-y-1 rounded-xl border border-[var(--ui-border)] bg-[var(--ui-panel-2)]/70 px-2.5 py-2 text-[12px] text-[color:var(--ui-text-muted)]">
+            {queuedFollowUps.map((followUp) => (
+              <div key={followUp.id} className="relative flex min-w-0 items-center gap-2">
+                <CornerDownRight className="size-3.5 shrink-0 text-[color:var(--ui-text-dim)]" />
+                <div className="min-w-0 flex-1 truncate">
+                  {followUp.text || `${followUp.imageCount} imagen(es) en cola`}
+                </div>
+                <button
+                  type="button"
+                  disabled={queuedActionPending || !onQueuedDirect}
+                  onClick={() =>
+                    void handleQueuedAction(() => onQueuedDirect?.(followUp.id))
+                  }
+                  className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[color:var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-surface)] hover:text-[color:var(--ui-text)] disabled:opacity-50"
+                  title="Forzar este seguimiento en el run activo"
+                >
+                  <CornerDownRight className="size-3" />
+                  Dirigir
+                </button>
+                <button
+                  type="button"
+                  disabled={queuedActionPending || !onQueuedDiscard}
+                  onClick={() =>
+                    void handleQueuedAction(() => onQueuedDiscard?.(followUp.id))
+                  }
+                  className="flex size-6 shrink-0 items-center justify-center rounded-md text-[color:var(--ui-text-dim)] transition-colors hover:bg-[var(--ui-surface)] hover:text-[color:var(--ui-text)] disabled:opacity-50"
+                  aria-label="Descartar seguimiento en cola"
+                  title="Descartar seguimiento en cola"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  disabled={queuedActionPending}
+                  onClick={() =>
+                    setQueuedMenuOpen((open) => (open === followUp.id ? null : followUp.id))
+                  }
+                  className="flex size-6 shrink-0 items-center justify-center rounded-md text-[color:var(--ui-text-dim)] transition-colors hover:bg-[var(--ui-surface)] hover:text-[color:var(--ui-text)] disabled:opacity-50"
+                  aria-label="Más opciones de cola"
+                  title="Más opciones de cola"
+                >
+                  <MoreHorizontal className="size-3.5" />
+                </button>
+                {queuedMenuOpen === followUp.id && (
+                  <div className="absolute top-7 right-0 z-30 min-w-44 rounded-lg border border-[var(--ui-border)] bg-[var(--ui-panel-2)] p-1 shadow-lg">
+                    <button
+                      type="button"
+                      disabled={!canSubmit || queuedActionPending || !onQueuedDiscard}
+                      onClick={() => void handleQueuedReplace(followUp.id)}
+                      className="w-full rounded-md px-2 py-1.5 text-left text-[12px] text-[color:var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-surface)] hover:text-[color:var(--ui-text)] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Reemplazar por borrador
+                    </button>
+                    {queuedFollowUps.length > 1 && onQueuedClearAll && (
+                      <button
+                        type="button"
+                        disabled={queuedActionPending}
+                        onClick={() => void handleQueuedAction(onQueuedClearAll)}
+                        className="w-full rounded-md px-2 py-1.5 text-left text-[12px] text-[color:var(--ui-text-muted)] transition-colors hover:bg-[var(--ui-surface)] hover:text-[color:var(--ui-text)] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Borrar todos
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
         {isDragOver && (
           <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-[var(--ui-surface)]/80 backdrop-blur-sm">
             <span className="rounded-md bg-[var(--ui-panel-2)] px-3 py-1.5 text-sm font-medium text-[color:var(--ui-accent)]">
@@ -359,7 +504,7 @@ export const CloudPromptBar = memo(function CloudPromptBarComponent({
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={busy ? "Escribe un mensaje para encolarlo..." : placeholder}
+          placeholder={busy ? "Enviar seguimiento al finalizar el run" : placeholder}
           disabled={disabled}
           className={cn(
             "w-full min-w-0 resize-none overflow-hidden bg-transparent text-[13px] leading-[1.45] text-[color:var(--ui-text)] outline-none placeholder:text-[color:var(--ui-text-dim)]",

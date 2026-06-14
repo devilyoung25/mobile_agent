@@ -185,6 +185,9 @@ export interface AgentThread {
   createdAt: number
   updatedAt: number
   traceUrl?: string | null
+  workspaceId?: string | null
+  workspaceLabel?: string | null
+  workspaceBranch?: string | null
   messages: Array<Message>
   pr?: {
     number: number
