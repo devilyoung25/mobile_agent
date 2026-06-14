@@ -56,6 +56,11 @@ export function AgentsHome() {
   const [repoOverride, setRepoOverride] = useState<string | null | undefined>(
     undefined
   )
+  // How the agent's isolated worktree is based. "integration": fresh branch from
+  // origin/develop. "local_branch": the dev's branch with develop merged in.
+  const [baseMode, setBaseMode] = useState<"integration" | "local_branch">(
+    "integration"
+  )
   const repo =
     selectedWorkspace
       ? null
@@ -119,7 +124,10 @@ export function AgentsHome() {
     if (selectedWorkspace || repoOverride === null) {
       configurable.repo_explicitly_none = true
     }
-    if (selectedWorkspace?.id) configurable.workspace_id = selectedWorkspace.id
+    if (selectedWorkspace?.id) {
+      configurable.workspace_id = selectedWorkspace.id
+      configurable.base_mode = baseMode
+    }
 
     stream
       .submit(
@@ -140,13 +148,36 @@ export function AgentsHome() {
         <div className="flex w-full flex-col items-center gap-6">
           <Logo />
           {selectedWorkspace && (
-            <div className="flex max-w-full items-center gap-2 rounded-full border border-[var(--ui-border)] bg-[var(--ui-panel)] px-3 py-1 text-xs text-[var(--ui-text-muted)]">
-              <span className="min-w-0 truncate">{selectedWorkspace.label}</span>
-              {selectedWorkspace.current_branch && (
-                <span className="rounded bg-[var(--ui-panel-2)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-dim)]">
-                  {selectedWorkspace.current_branch}
-                </span>
-              )}
+            <div className="flex flex-col items-center gap-2">
+              <div className="flex max-w-full items-center gap-2 rounded-full border border-[var(--ui-border)] bg-[var(--ui-panel)] px-3 py-1 text-xs text-[var(--ui-text-muted)]">
+                <span className="min-w-0 truncate">{selectedWorkspace.label}</span>
+                {selectedWorkspace.current_branch && (
+                  <span className="rounded bg-[var(--ui-panel-2)] px-1.5 py-0.5 text-[10px] text-[var(--ui-text-dim)]">
+                    {selectedWorkspace.current_branch}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1 rounded-full border border-[var(--ui-border)] bg-[var(--ui-panel-2)] p-0.5 text-[11px]">
+                {(
+                  [
+                    ["integration", "Rama nueva desde develop"],
+                    ["local_branch", "Sobre mi rama (con develop)"],
+                  ] as const
+                ).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setBaseMode(mode)}
+                    className={
+                      baseMode === mode
+                        ? "rounded-full bg-[var(--ui-accent)]/20 px-2.5 py-1 font-medium text-[color:var(--ui-text)]"
+                        : "rounded-full px-2.5 py-1 text-[color:var(--ui-text-muted)] hover:text-[color:var(--ui-text)]"
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           <AgentPromptBar

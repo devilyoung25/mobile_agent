@@ -34,6 +34,7 @@ from .agent_overrides import normalize_profile_overrides
 from .options import is_supported_model, model_supports_effort, model_supports_images
 from .profiles import get_profile
 from .team_settings import get_team_default_model
+from .workspace_snapshot import snapshot_workspace
 from .workspaces import prepare_workspace_run
 
 logger = logging.getLogger(__name__)
@@ -604,6 +605,7 @@ async def _create_dashboard_thread_record(
     model_id: str | None = None,
     effort: str | None = None,
     workspace_id: str | None = None,
+    base_mode: str | None = None,
 ) -> dict[str, Any]:
     """Create or update dashboard thread metadata without starting a run."""
     profile = await get_profile(login) or {}
@@ -636,7 +638,7 @@ async def _create_dashboard_thread_record(
         metadata["repo_name"] = repo_config["name"]
     elif repo_explicitly_none:
         metadata["repo_explicitly_none"] = True
-    workspace = await prepare_workspace_run(login, workspace_id, thread_id)
+    workspace = await prepare_workspace_run(login, workspace_id, thread_id, base_mode=base_mode)
     if workspace:
         metadata["workspace_id"] = workspace.get("id")
         metadata["workspace_label"] = workspace.get("label")
@@ -648,6 +650,12 @@ async def _create_dashboard_thread_record(
         metadata["workspace_worktree_path"] = workspace.get("worktree_path")
         metadata["workspace_worktree_branch"] = workspace.get("worktree_branch")
         metadata["workspace_worktree_base_branch"] = workspace.get("worktree_base_branch")
+        metadata["workspace_worktree_base_commit"] = workspace.get("worktree_base_commit")
+        metadata["workspace_base_mode"] = workspace.get("base_mode")
+        metadata["workspace_integration_branch"] = workspace.get("integration_branch")
+        metadata["workspace_integration_commit"] = workspace.get("integration_commit")
+        metadata["workspace_integration_target"] = workspace.get("integration_target")
+        metadata["workspace_integration_synced"] = workspace.get("integration_synced")
         metadata["workspace_remote_url"] = workspace.get("remote_url")
         metadata["workspace_is_dirty"] = workspace.get("is_dirty")
         if workspace.get("azure_project"):
@@ -853,6 +861,9 @@ async def _enrich_run_start_command(
             effort=client_configurable.get("agent_effort"),
             workspace_id=client_configurable.get("workspace_id")
             if isinstance(client_configurable.get("workspace_id"), str)
+            else None,
+            base_mode=client_configurable.get("base_mode")
+            if isinstance(client_configurable.get("base_mode"), str)
             else None,
         )
         metadata = thread.get("metadata") if isinstance(thread.get("metadata"), dict) else metadata
@@ -1192,6 +1203,37 @@ async def _authorized_thread(
     metadata = thread.get("metadata") if isinstance(thread.get("metadata"), dict) else {}
     _assert_thread_owner(metadata, login, email)
     return thread
+
+
+async def snapshot_dashboard_workspace(
+    thread_id: str, login: str, *, email: str | None = None
+) -> dict[str, Any]:
+    """Compute a read-only snapshot of the thread's prepared workspace worktree.
+
+    Ownership is validated first (404 before any git runs). The snapshot compares
+    against the persisted ``workspace_worktree_base_commit`` — the worktree's prep
+    HEAD — so it isolates exactly what the agent changed. Results are written back
+    to thread metadata (``diff_stats`` surfaces to the UI as ``diffStats``).
+    """
+    metadata = await _authorized_thread_metadata(thread_id, login, email=email)
+    worktree_path = metadata.get("workspace_worktree_path")
+    base_commit = metadata.get("workspace_worktree_base_commit")
+    if not isinstance(worktree_path, str) or not isinstance(base_commit, str):
+        raise HTTPException(404, "workspace_not_attached")
+
+    snapshot = await snapshot_workspace(worktree_path, base_commit)
+
+    diff_stats = snapshot.get("diff_stats") if isinstance(snapshot, dict) else None
+    await langgraph_client().threads.update(
+        thread_id=thread_id,
+        metadata={
+            "diff_stats": diff_stats,
+            "changed_files": snapshot.get("changed_files"),
+            "workspace_head_commit": snapshot.get("head_commit"),
+            "workspace_has_uncommitted_changes": snapshot.get("is_dirty"),
+        },
+    )
+    return snapshot
 
 
 async def get_dashboard_thread_state(

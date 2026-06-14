@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { useStreamContext as useAgentThreadStream } from "@langchain/react"
 
 import type { AgentThread, Message } from "@/lib/agents/types"
@@ -10,6 +11,7 @@ import { streamMessagesToUi } from "@/lib/agents/streamMessagesToUi"
 import { useSubmitAgentMessage } from "@/lib/agents/provider/useSubmitAgentMessage"
 import { useModelOptions } from "@/lib/agents/provider/useModelOptions"
 import { AgentsApiError, agentsApi } from "@/lib/agents/api"
+import { agentThreadKeys } from "@/lib/agents/queries"
 
 interface AgentThreadViewProps {
   thread: AgentThread
@@ -34,6 +36,30 @@ function userMessageText(message: Message): string {
 export function AgentThreadView({ thread }: AgentThreadViewProps) {
   const sendMessage = useSubmitAgentMessage(thread.id)
   const stream = useAgentThreadStream()
+  const queryClient = useQueryClient()
+
+  const [snapshotting, setSnapshotting] = useState(false)
+  const [snapshotError, setSnapshotError] = useState<string | null>(null)
+  const handleRefreshChanges = useCallback(async () => {
+    setSnapshotting(true)
+    setSnapshotError(null)
+    try {
+      await agentsApi.snapshotWorkspace(thread.id)
+      await queryClient.invalidateQueries({
+        queryKey: agentThreadKeys.detail(thread.id),
+      })
+      await queryClient.invalidateQueries({
+        queryKey: agentThreadKeys.all,
+        exact: true,
+      })
+    } catch (err) {
+      setSnapshotError(
+        err instanceof AgentsApiError ? err.message : "workspace_snapshot_failed"
+      )
+    } finally {
+      setSnapshotting(false)
+    }
+  }, [queryClient, thread.id])
 
   const { models, defaultSelection } = useModelOptions()
   const threadSelection = useMemo<ModelSelection | null>(() => {
@@ -289,7 +315,7 @@ export function AgentThreadView({ thread }: AgentThreadViewProps) {
     <div className="flex min-w-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="shrink-0 px-4 pt-3">
-          <div className="mx-auto w-full max-w-3xl">
+          <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--ui-border)] bg-[var(--ui-panel-2)] px-2.5 py-1 text-[11px] font-medium text-[color:var(--ui-text-muted)]">
               {isWorkspaceThread
                 ? `Workspace · ${thread.workspaceLabel ?? "repo"}${
@@ -297,7 +323,36 @@ export function AgentThreadView({ thread }: AgentThreadViewProps) {
                   }`
                 : "Sin workspace"}
             </span>
+            {isWorkspaceThread ? (
+              <div className="flex items-center gap-2">
+                {thread.diffStats ? (
+                  <span className="text-[11px] font-medium text-[color:var(--ui-text-muted)]">
+                    {thread.diffStats.files}{" "}
+                    {thread.diffStats.files === 1 ? "archivo" : "archivos"}{" "}
+                    <span className="text-[var(--ui-success)]">
+                      +{thread.diffStats.additions}
+                    </span>{" "}
+                    <span className="text-[var(--ui-danger)]">
+                      -{thread.diffStats.deletions}
+                    </span>
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={handleRefreshChanges}
+                  disabled={snapshotting}
+                  className="rounded-full border border-[var(--ui-border)] bg-[var(--ui-panel-2)] px-2.5 py-1 text-[11px] font-medium text-[color:var(--ui-text-muted)] transition-colors hover:border-[var(--ui-accent)]/40 disabled:opacity-50"
+                >
+                  {snapshotting ? "Actualizando…" : "Actualizar cambios"}
+                </button>
+              </div>
+            ) : null}
           </div>
+          {snapshotError ? (
+            <div className="mx-auto mt-1 w-full max-w-3xl text-[11px] text-red-300">
+              {snapshotError}
+            </div>
+          ) : null}
         </div>
         {hasMessages ? (
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">

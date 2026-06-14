@@ -26,6 +26,13 @@ from pydantic import BaseModel
 
 WORKSPACES_NAMESPACE_PREFIX = "workspaces"
 DEFAULT_WORKTREE_ROOT = "~/.on-mobile-agent/worktrees"
+DEFAULT_INTEGRATION_BRANCH = "develop"
+# Identity for the develop-merge commit created when binding a local_branch worktree.
+# Never the dev's identity; this commit is synthetic prep, not authored work.
+_WORKTREE_MERGE_USER_NAME = "ON Mobile Agent"
+_WORKTREE_MERGE_USER_EMAIL = "on-mobile-agent@noreply.local"
+_BASE_MODE_INTEGRATION = "integration"
+_BASE_MODE_LOCAL_BRANCH = "local_branch"
 
 
 class WorkspaceCreate(BaseModel):
@@ -138,6 +145,21 @@ def _allow_dirty_workspace() -> bool:
     return _truthy(os.environ.get("ON_MOBILE_AGENT_ALLOW_DIRTY_WORKSPACE"))
 
 
+def _integration_branch(workspace: dict[str, Any]) -> str:
+    configured = (workspace.get("integration_branch") or "").strip()
+    if configured:
+        return configured
+    env_branch = (os.environ.get("ON_MOBILE_AGENT_INTEGRATION_BRANCH") or "").strip()
+    return env_branch or DEFAULT_INTEGRATION_BRANCH
+
+
+def _base_mode(workspace: dict[str, Any], override: str | None) -> str:
+    candidate = (override or workspace.get("default_base_mode") or _BASE_MODE_INTEGRATION).strip()
+    if candidate not in {_BASE_MODE_INTEGRATION, _BASE_MODE_LOCAL_BRANCH}:
+        raise HTTPException(422, "workspace_base_mode_invalid")
+    return candidate
+
+
 def _run_git(path: Path, *args: str) -> str:
     result = subprocess.run(
         ["git", "-C", str(path), *args],
@@ -159,6 +181,49 @@ def _run_git_status(path: Path, *args: str) -> int:
         text=True,
         timeout=10,
     ).returncode
+
+
+def _git_env() -> dict[str, str]:
+    """Non-interactive git env so a credential-less fetch fails fast (never hangs)."""
+    env = dict(os.environ)
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env.setdefault("GIT_ASKPASS", "")
+    env.setdefault("GCM_INTERACTIVE", "never")
+    env.setdefault("GIT_SSH_COMMAND", "ssh -oBatchMode=yes")
+    return env
+
+
+def _fetch_origin(source: Path, *refs: str, timeout: int = 60) -> bool:
+    """Best-effort ``git fetch`` of the given refs from origin.
+
+    Returns ``True`` on success, ``False`` otherwise. Never raises and never
+    surfaces git stderr (it can carry the remote URL / credential hints); the
+    caller falls back to whatever ``origin/<ref>`` already resolves locally.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(source), "fetch", "--prune", "--no-tags", "origin", *refs],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=_git_env(),
+        )
+    except (subprocess.SubprocessError, OSError):
+        return False
+    return result.returncode == 0
+
+
+def _rev_parse(source: Path, ref: str) -> str | None:
+    result = subprocess.run(
+        ["git", "-C", str(source), "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    sha = result.stdout.strip()
+    return sha or None
 
 
 def _worktree_root() -> Path:
@@ -223,7 +288,13 @@ def _validate_workspace(actor_id: str, body: WorkspaceCreate) -> dict[str, Any]:
     }
 
 
-def _run_worktree_add(source: Path, path: Path, branch: str) -> None:
+def _run_worktree_add(source: Path, path: Path, branch: str, start_point: str) -> bool:
+    """Create the per-thread worktree branch from ``start_point``.
+
+    Returns ``True`` if a new worktree was created, ``False`` if it already existed
+    (idempotent re-prep for the same thread). Raises 409 if the path exists but is
+    not our worktree on the expected branch.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
         try:
@@ -232,7 +303,7 @@ def _run_worktree_add(source: Path, path: Path, branch: str) -> None:
         except HTTPException as exc:
             raise HTTPException(409, "workspace_worktree_path_exists") from exc
         if existing_root == path.resolve() and existing_branch == branch:
-            return
+            return False
         raise HTTPException(409, "workspace_worktree_path_exists")
 
     branch_exists = (
@@ -241,11 +312,53 @@ def _run_worktree_add(source: Path, path: Path, branch: str) -> None:
     )
     args = ["worktree", "add", str(path), branch]
     if not branch_exists:
-        args = ["worktree", "add", "-b", branch, str(path), "HEAD"]
+        args = ["worktree", "add", "-b", branch, str(path), start_point]
     _run_git(source, *args)
+    return True
 
 
-def _prepare_workspace_run_sync(workspace: dict[str, Any], thread_id: str) -> dict[str, Any]:
+def _remove_worktree(source: Path, worktree: Path, branch: str) -> None:
+    """Best-effort teardown of a worktree and its branch (used on merge failure)."""
+    subprocess.run(
+        ["git", "-C", str(source), "worktree", "remove", "--force", str(worktree)],
+        check=False, capture_output=True, text=True, timeout=20,
+    )
+    subprocess.run(
+        ["git", "-C", str(source), "branch", "-D", branch],
+        check=False, capture_output=True, text=True, timeout=10,
+    )
+
+
+def _worktree_merge_integration(
+    source: Path, worktree: Path, branch: str, integration: str
+) -> None:
+    """Merge ``origin/<integration>`` (develop) into a fresh local_branch worktree.
+
+    On conflict, abort the merge and tear down the worktree+branch, then raise 409
+    so the dev resolves the divergence with develop before retrying. The merge commit
+    is authored by the synthetic agent identity, never the dev's.
+    """
+    merge = subprocess.run(
+        [
+            "git", "-C", str(worktree),
+            "-c", f"user.name={_WORKTREE_MERGE_USER_NAME}",
+            "-c", f"user.email={_WORKTREE_MERGE_USER_EMAIL}",
+            "merge", "--no-edit", f"origin/{integration}",
+        ],
+        check=False, capture_output=True, text=True, timeout=60,
+    )
+    if merge.returncode != 0:
+        subprocess.run(
+            ["git", "-C", str(worktree), "merge", "--abort"],
+            check=False, capture_output=True, text=True, timeout=10,
+        )
+        _remove_worktree(source, worktree, branch)
+        raise HTTPException(409, "workspace_integration_merge_conflict")
+
+
+def _prepare_workspace_run_sync(
+    workspace: dict[str, Any], thread_id: str, *, base_mode: str | None = None
+) -> dict[str, Any]:
     source = Path(str(workspace.get("path") or "")).expanduser().resolve()
     if not source.is_dir():
         raise HTTPException(422, "workspace_path_not_directory")
@@ -259,26 +372,60 @@ def _prepare_workspace_run_sync(workspace: dict[str, Any], thread_id: str) -> di
     remote_url = _run_git(source, "remote", "get-url", "origin")
     _validate_azure_devops_remote(remote_url)
 
-    base_branch = _run_git(source, "branch", "--show-current") or "HEAD"
+    source_branch = _run_git(source, "branch", "--show-current")
     source_dirty = bool(_run_git(source, "status", "--short"))
     if source_dirty and not _allow_dirty_workspace():
         raise HTTPException(409, "workspace_source_dirty")
+
+    integration = _integration_branch(workspace)
+    mode = _base_mode(workspace, base_mode)
+
+    # Always refresh the integration branch (develop) so the agent's base carries the
+    # latest mainline. Best-effort: offline falls back to the last-known origin ref.
+    synced = _fetch_origin(source, integration)
+    integration_commit = _rev_parse(source, f"origin/{integration}")
+    if integration_commit is None:
+        raise HTTPException(422, "workspace_integration_branch_missing")
+
     branch = _worktree_branch(thread_id)
     worktree = _worktree_path(str(workspace["id"]), thread_id)
-    _run_worktree_add(source, worktree, branch)
+
+    if mode == _BASE_MODE_LOCAL_BRANCH:
+        # New isolated branch off the dev's local branch, with develop merged on top.
+        # The dev's real branch is never touched; on approval the work merges back here.
+        if not source_branch:
+            raise HTTPException(422, "workspace_base_branch_required")
+        created = _run_worktree_add(source, worktree, branch, start_point=source_branch)
+        if created:
+            _worktree_merge_integration(source, worktree, branch, integration)
+        base_commit = _run_git(worktree, "rev-parse", "HEAD")
+        integration_target = source_branch
+    else:
+        # New isolated branch straight from the freshly-fetched integration tip.
+        created = _run_worktree_add(
+            source, worktree, branch, start_point=f"origin/{integration}"
+        )
+        base_commit = integration_commit
+        integration_target = integration
 
     return {
         **workspace,
         "source_path": str(source),
-        "source_branch": base_branch,
+        "source_branch": source_branch or None,
         "source_is_dirty": source_dirty,
+        "base_mode": mode,
+        "integration_branch": integration,
+        "integration_commit": integration_commit,
+        "integration_target": integration_target,
+        "integration_synced": synced,
         "path": str(worktree),
         "current_branch": branch,
         "remote_url": _safe_remote_url(remote_url),
         "is_dirty": bool(_run_git(worktree, "status", "--short")),
         "worktree_path": str(worktree),
         "worktree_branch": branch,
-        "worktree_base_branch": base_branch,
+        "worktree_base_branch": integration_target,
+        "worktree_base_commit": base_commit,
     }
 
 
@@ -314,12 +461,14 @@ async def get_workspace(actor_id: str, workspace_id: str | None) -> dict[str, An
 
 
 async def prepare_workspace_run(
-    actor_id: str, workspace_id: str | None, thread_id: str
+    actor_id: str, workspace_id: str | None, thread_id: str, *, base_mode: str | None = None
 ) -> dict[str, Any] | None:
     workspace = await get_workspace(actor_id, workspace_id)
     if not workspace:
         return None
-    return await asyncio.to_thread(_prepare_workspace_run_sync, workspace, thread_id)
+    return await asyncio.to_thread(
+        _prepare_workspace_run_sync, workspace, thread_id, base_mode=base_mode
+    )
 
 
 async def register_workspace(actor_id: str, body: WorkspaceCreate) -> dict[str, Any]:

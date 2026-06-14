@@ -406,6 +406,20 @@ function workspaceErrorLabel(error: string): string {
       "El repositorio seleccionado no tiene remote origin configurado.",
     workspace_path_not_azure_repo:
       "Selecciona un repositorio conectado a Azure DevOps.",
+    workspace_path_wrong_azure_org:
+      "El repositorio pertenece a otra organización de Azure DevOps.",
+    workspace_source_dirty:
+      "Tu repositorio tiene cambios sin commitear. Haz commit o stash antes de iniciar.",
+    workspace_integration_branch_missing:
+      "No existe la rama de integración (develop) en origin. Verifica el remoto.",
+    workspace_base_branch_required:
+      "Tu repositorio está en HEAD desacoplado. Cambia a una rama nombrada.",
+    workspace_integration_merge_conflict:
+      "Tu rama tiene conflictos con develop. Resuélvelos antes de usar el workspace.",
+    workspace_fetch_failed:
+      "No se pudo actualizar desde el remoto. Revisa conexión, permisos o credenciales.",
+    workspace_base_mode_invalid: "Modo de base de workspace inválido.",
+    workspace_not_attached: "Este hilo no tiene un workspace asociado.",
   }
   return labels[error] ?? error
 }

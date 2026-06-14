@@ -1,4 +1,10 @@
-import type { AgentSchedule, AgentThread, ImageChunk, Message } from "./types"
+import type {
+  AgentSchedule,
+  AgentThread,
+  ImageChunk,
+  Message,
+  WorkspaceSnapshot,
+} from "./types"
 
 export type { AgentSchedule, AgentThread, Message }
 
@@ -198,6 +204,13 @@ export const agentsApi = {
   getThreadPrDiff: (threadId: string) =>
     agentsRequest<ThreadPrDiff>(
       `/threads/${encodeURIComponent(threadId)}/pr-diff`
+    ),
+  // Recompute the workspace diff snapshot for a thread (writes diffStats back to
+  // the thread metadata). Base/head come from the persisted prep commit.
+  snapshotWorkspace: (threadId: string) =>
+    agentsRequest<WorkspaceSnapshot>(
+      `/threads/${encodeURIComponent(threadId)}/workspace/snapshot`,
+      { method: "POST" }
     ),
   streamUrl: (threadId: string) =>
     `${API_BASE}/dashboard/api/threads/${encodeURIComponent(threadId)}/stream`,

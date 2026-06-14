@@ -99,6 +99,7 @@ from .thread_api import (
     proxy_dashboard_thread_stream_events,
     resume_dashboard_interrupt,
     send_dashboard_message,
+    snapshot_dashboard_workspace,
     stream_dashboard_thread,
 )
 from .workspaces import (
@@ -683,6 +684,16 @@ async def api_get_thread_state(
     session: dict[str, Any] = _SESSION_DEP,
 ) -> dict[str, Any]:
     return await get_dashboard_thread_state(thread_id, session["sub"], email=session.get("email"))
+
+
+@router.post("/threads/{thread_id}/workspace/snapshot")
+async def api_workspace_snapshot(
+    thread_id: str,
+    session: dict[str, Any] = _SESSION_DEP,
+) -> dict[str, Any]:
+    return await snapshot_dashboard_workspace(
+        thread_id, session["sub"], email=session.get("email")
+    )
 
 
 @router.post("/threads/{thread_id}/stream/events")

@@ -210,6 +210,27 @@ export interface AgentThread {
   }>
 }
 
+export interface WorkspaceSnapshot {
+  base_commit: string
+  head_commit: string
+  is_dirty: boolean
+  diff_stats: {
+    files: number
+    additions: number
+    deletions: number
+  }
+  changed_files: Array<{
+    path: string
+    status: string
+    additions: number | null
+    deletions: number | null
+  }>
+  commits: Array<{
+    sha: string
+    subject: string
+  }>
+}
+
 export type GitFileStatus =
   | "index-modified"
   | "index-added"
