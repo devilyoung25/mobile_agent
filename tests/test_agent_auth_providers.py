@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -27,6 +28,11 @@ async def test_engine_run_uses_actor_identity_and_azure_devops_tools() -> None:
     }
     main_model = MagicMock(name="main_model")
     subagent_model = MagicMock(name="subagent_model")
+    model_plan = SimpleNamespace(
+        model=main_model,
+        subagent_model=subagent_model,
+        model_id="on-auto-coder",
+    )
     ado_tool = MagicMock(name="ado_tool")
 
     with (
@@ -43,13 +49,13 @@ async def test_engine_run_uses_actor_identity_and_azure_devops_tools() -> None:
         patch(
             "agent.server.get_team_default_model_pair",
             new_callable=AsyncMock,
-            return_value=(("openai:gpt-5.5", "medium"), ("openai:gpt-5.5", "low")),
+            return_value=(("on-auto-coder", "medium"), ("on-auto-coder", "medium")),
         ),
         patch("agent.server.load_profile", new_callable=AsyncMock, return_value={}) as load_profile,
         patch("agent.server.client") as fake_client,
         patch("agent.server.record_agent_thread_usage", new_callable=AsyncMock) as record_usage,
-        patch("agent.server.fallback_model_id_for", return_value=None),
-        patch("agent.server.make_model", side_effect=[main_model, subagent_model]),
+        patch("agent.server.get_gateway_models", new_callable=AsyncMock, return_value=[]),
+        patch("agent.server.create_model_plan", return_value=model_plan),
         patch("agent.server.construct_system_prompt", return_value="prompt") as prompt,
         patch(
             "agent.server.load_azure_devops_tools_for_actor",

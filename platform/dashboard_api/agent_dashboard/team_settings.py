@@ -17,6 +17,7 @@ from pydantic import BaseModel, field_validator, model_validator
 
 from .options import (
     default_model_pair,
+    default_subagent_model_pair,
     is_supported_model,
     model_supports_effort,
     provider_fallback_pair,
@@ -122,6 +123,7 @@ def _parse_repo(value: object) -> dict[str, str] | None:
 
 def _default_settings() -> dict[str, Any]:
     fallback_model, fallback_effort = default_model_pair()
+    fallback_subagent_model, fallback_subagent_effort = default_subagent_model_pair()
     return {
         "trigger_mode": "every_push",
         "review_draft_prs": False,
@@ -132,13 +134,13 @@ def _default_settings() -> dict[str, Any]:
         "org_guidelines": None,
         "default_agent_model": fallback_model,
         "default_agent_reasoning_effort": fallback_effort,
-        "default_agent_subagent_model": fallback_model,
-        "default_agent_subagent_reasoning_effort": fallback_effort,
+        "default_agent_subagent_model": fallback_subagent_model,
+        "default_agent_subagent_reasoning_effort": fallback_subagent_effort,
         "default_repo": _env_default_repo(),
         "default_reviewer_model": fallback_model,
         "default_reviewer_reasoning_effort": fallback_effort,
-        "default_reviewer_subagent_model": fallback_model,
-        "default_reviewer_subagent_reasoning_effort": fallback_effort,
+        "default_reviewer_subagent_model": fallback_subagent_model,
+        "default_reviewer_subagent_reasoning_effort": fallback_subagent_effort,
         "updated_at": None,
     }
 

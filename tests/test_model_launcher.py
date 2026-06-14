@@ -2,9 +2,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from model_launcher import (
+    create_model_plan,
     default_model_pair,
-    fallback_model_id_for,
-    is_ollama_model_id,
     make_model,
     model_supports_effort,
     supported_model_ids,
@@ -12,70 +11,153 @@ from model_launcher import (
 )
 
 
-def test_ollama_model_id_detection() -> None:
-    assert is_ollama_model_id("ollama:qwen3-coder:480b-cloud") is True
-    assert is_ollama_model_id("openai:gpt-5.5") is False
-    assert is_ollama_model_id(None) is False
+def test_registry_exposes_only_logical_gateway_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MODEL_GATEWAY_MODEL", "on-auto-coder")
+    monkeypatch.setenv("MODEL_GATEWAY_MODELS", "")
 
-
-def test_registry_lists_ollama_models_first(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLLAMA_MODELS", "qwen3-coder:480b-cloud, qwen3-coder-next:cloud")
     models = supported_models()
-    assert models[0]["id"] == "ollama:qwen3-coder:480b-cloud"
-    assert models[1]["id"] == "ollama:qwen3-coder-next:cloud"
-    assert "anthropic:claude-opus-4-8" in supported_model_ids()
+
+    assert models == [
+        {
+            "id": "on-auto-coder",
+            "label": "on-auto-coder",
+            "efforts": ["medium"],
+            "default_effort": "medium",
+            "supports_images": False,
+        }
+    ]
+    assert supported_model_ids() == frozenset({"on-auto-coder"})
 
 
-def test_registry_hides_cloud_models_without_keys(monkeypatch: pytest.MonkeyPatch) -> None:
-    for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY", "FIREWORKS_API_KEY"):
-        monkeypatch.delenv(key, raising=False)
-    monkeypatch.setenv("OLLAMA_MODELS", "qwen3-coder:480b-cloud")
-    assert [m["id"] for m in supported_models()] == ["ollama:qwen3-coder:480b-cloud"]
+def test_registry_can_list_extra_logical_gateway_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MODEL_GATEWAY_MODEL", "on-auto-coder")
+    monkeypatch.setenv("MODEL_GATEWAY_MODELS", "on-fast,on-deep")
+    monkeypatch.setenv(
+        "MODEL_GATEWAY_MODEL_LABELS",
+        "on-auto-coder=Auto Coder,on-fast=Fast,on-deep=Deep",
+    )
+
+    assert [m["id"] for m in supported_models()] == ["on-auto-coder", "on-fast", "on-deep"]
+    assert [m["label"] for m in supported_models()] == ["Auto Coder", "Fast", "Deep"]
 
 
-def test_default_model_pair_prefers_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLLAMA_MODELS", "qwen3-coder:480b-cloud")
-    monkeypatch.setenv("DEFAULT_MODEL_ID", "ollama:qwen3-coder:480b-cloud")
-    assert default_model_pair() == ("ollama:qwen3-coder:480b-cloud", "medium")
+def test_default_model_pair_uses_gateway_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MODEL_GATEWAY_MODEL", "on-auto-coder")
+    assert default_model_pair() == ("on-auto-coder", "medium")
 
 
-def test_default_model_pair_falls_back_to_first_available(
+def test_gateway_model_supports_configured_effort(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MODEL_GATEWAY_EFFORTS", "medium,high")
+    assert model_supports_effort("on-auto-coder", "medium") is True
+    assert model_supports_effort("on-auto-coder", "high") is True
+    assert model_supports_effort("on-auto-coder", "max") is False
+
+
+def test_make_model_requires_gateway_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("MODEL_GATEWAY_BASE_URL", raising=False)
+
+    with pytest.raises(RuntimeError, match="MODEL_GATEWAY_BASE_URL is required"):
+        make_model("on-auto-coder")
+
+
+def test_make_model_uses_openai_compatible_gateway_transport(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("OLLAMA_MODELS", "qwen3-coder:480b-cloud")
-    monkeypatch.setenv("DEFAULT_MODEL_ID", "openai:not-a-model")
-    assert default_model_pair() == ("ollama:qwen3-coder:480b-cloud", "medium")
-
-
-def test_ollama_model_supports_only_medium(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OLLAMA_MODELS", "qwen3-coder:480b-cloud")
-    assert model_supports_effort("ollama:qwen3-coder:480b-cloud", "medium") is True
-    assert model_supports_effort("ollama:qwen3-coder:480b-cloud", "high") is False
-
-
-def test_make_model_routes_ollama_to_openai_compatible_client(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("OLLAMA_API_KEY", "test-key")
-    monkeypatch.setenv("OLLAMA_BASE_URL", "https://ollama.com")
-    monkeypatch.setenv("OLLAMA_TEMPERATURE", "0.2")
-    monkeypatch.setenv("OLLAMA_MAX_TOKENS", "1234")
-    model = MagicMock(name="ollama_model")
+    monkeypatch.setenv("MODEL_GATEWAY_BASE_URL", "http://gateway.test/v1")
+    monkeypatch.setenv("MODEL_GATEWAY_API_KEY", "gateway-key")
+    monkeypatch.setenv("MODEL_GATEWAY_TEMPERATURE", "0.2")
+    monkeypatch.setenv("MODEL_GATEWAY_MAX_TOKENS", "1234")
+    model = MagicMock(name="gateway_model")
 
     with patch("langchain_openai.ChatOpenAI", return_value=model) as chat_openai:
-        assert make_model("ollama:qwen3-coder:480b-cloud", max_tokens=64_000) is model
+        assert make_model("on-auto-coder", max_tokens=64_000) is model
 
+    # Precedence: an explicit max_tokens arg wins over the env default (1234).
     chat_openai.assert_called_once_with(
-        model="qwen3-coder:480b-cloud",
-        api_key="test-key",
-        base_url="https://ollama.com/v1",
+        model="on-auto-coder",
+        api_key="gateway-key",
+        base_url="http://gateway.test/v1",
         temperature=0.2,
-        max_tokens=1234,
+        max_tokens=64_000,
     )
 
 
-def test_fallback_requires_provider_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    assert fallback_model_id_for("anthropic:claude-opus-4-8") == "openai:gpt-5.5"
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    assert fallback_model_id_for("anthropic:claude-opus-4-8") is None
-    assert fallback_model_id_for("ollama:qwen3-coder:480b-cloud") is None
+def test_make_model_env_max_tokens_used_when_no_arg(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MODEL_GATEWAY_BASE_URL", "http://gateway.test/v1")
+    monkeypatch.setenv("MODEL_GATEWAY_MAX_TOKENS", "1234")
+    model = MagicMock(name="gateway_model")
+
+    with patch("langchain_openai.ChatOpenAI", return_value=model) as chat_openai:
+        make_model("on-auto-coder")
+
+    assert chat_openai.call_args.kwargs["max_tokens"] == 1234
+
+
+def test_make_model_applies_profile_effort_and_output_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MODEL_GATEWAY_BASE_URL", "http://gateway.test/v1")
+    monkeypatch.setenv("MODEL_GATEWAY_MAX_TOKENS", "1234")
+    captured: dict[str, object] = {}
+
+    class _FakeChat:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+    with patch("langchain_openai.ChatOpenAI", _FakeChat):
+        make_model(
+            "on-auto-coder",
+            profile={"max_input_tokens": 200000},
+            reasoning_effort="high",
+            max_output_tokens=8000,
+        )
+
+    assert captured["profile"] == {"max_input_tokens": 200000}
+    assert captured["reasoning_effort"] == "high"
+    # Gateway-provided output cap wins over the env fallback (1234).
+    assert captured["max_tokens"] == 8000
+
+
+def test_profile_enables_fraction_based_summarization(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The core compaction fix: a model profile with max_input_tokens makes deepagents
+    # trigger summarization at a fraction of the real window instead of a fixed count.
+    monkeypatch.setenv("MODEL_GATEWAY_BASE_URL", "http://gateway.test/v1")
+    from deepagents.middleware.summarization import compute_summarization_defaults
+
+    model = make_model("on-auto-coder", profile={"max_input_tokens": 200000})
+
+    assert compute_summarization_defaults(model)["trigger"] == ("fraction", 0.85)
+
+
+def test_no_profile_falls_back_to_fixed_summarization(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MODEL_GATEWAY_BASE_URL", "http://gateway.test/v1")
+    from deepagents.middleware.summarization import compute_summarization_defaults
+
+    model = make_model("on-auto-coder")
+
+    assert compute_summarization_defaults(model)["trigger"] == ("tokens", 170000)
+
+
+def test_model_plan_uses_gateway_main_and_subagent_models() -> None:
+    main = MagicMock(name="main")
+    subagent = MagicMock(name="subagent")
+
+    def fake_make_model(model_id: str, **_kwargs: object) -> MagicMock:
+        return {"on-auto-coder": main, "on-auto-subagent": subagent}[model_id]
+
+    with patch("model_launcher.client.make_model", side_effect=fake_make_model):
+        plan = create_model_plan(
+            model_id="on-auto-coder",
+            effort="medium",
+            subagent_model_id="on-auto-subagent",
+            subagent_effort="medium",
+            max_tokens=64_000,
+        )
+
+    assert plan.model is main
+    assert plan.subagent_model is subagent
+    assert plan.model_id == "on-auto-coder"
+    assert plan.effort == "medium"
+
+
+def test_default_catalog_does_not_expose_provider_ids() -> None:
+    provider_prefixes = ("ollama:", "openrouter:", "anthropic:", "openai:", "google_genai:")
+    assert all(not model_id.startswith(provider_prefixes) for model_id in supported_model_ids())

@@ -6,8 +6,8 @@ from fastapi import HTTPException
 
 from agent.dashboard import thread_api
 
-_TEXT_ONLY_MODEL = "fireworks:accounts/fireworks/models/deepseek-v4-pro"
-_VISION_MODEL = "openai:gpt-5.5"
+_TEXT_ONLY_MODEL = "on-auto-coder"
+_VISION_MODEL = "on-auto-vision"
 
 
 def _image() -> thread_api.DashboardImageBody:
@@ -17,7 +17,11 @@ def _image() -> thread_api.DashboardImageBody:
     )
 
 
-def test_model_supports_images_marks_text_only_fireworks_models() -> None:
+def test_model_supports_images_marks_text_only_gateway_models(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MODEL_GATEWAY_MODELS", _VISION_MODEL)
+    monkeypatch.setenv("MODEL_GATEWAY_IMAGE_MODELS", _VISION_MODEL)
     assert not model_supports_images(_TEXT_ONLY_MODEL)
     assert model_supports_images(_VISION_MODEL)
 
@@ -30,7 +34,11 @@ def test_user_message_content_rejects_images_for_text_only_model() -> None:
     assert "does not support image input" in exc_info.value.detail
 
 
-def test_user_message_content_allows_images_for_vision_model() -> None:
+def test_user_message_content_allows_images_for_vision_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MODEL_GATEWAY_MODELS", _VISION_MODEL)
+    monkeypatch.setenv("MODEL_GATEWAY_IMAGE_MODELS", _VISION_MODEL)
     content = thread_api._user_message_content("see attached", [_image()], model_id=_VISION_MODEL)
 
     assert isinstance(content, list)
@@ -55,15 +63,17 @@ async def test_resolve_agent_model_choice_applies_profile_before_team_default(mo
     monkeypatch.setattr(thread_api, "get_team_default_model", fake_team_default)
 
     model_id, effort = await thread_api._resolve_agent_model_choice(
-        {"default_model": _TEXT_ONLY_MODEL, "reasoning_effort": "high"},
+        {"default_model": _TEXT_ONLY_MODEL, "reasoning_effort": "medium"},
         None,
         None,
     )
 
-    assert (model_id, effort) == (_TEXT_ONLY_MODEL, "high")
+    assert (model_id, effort) == (_TEXT_ONLY_MODEL, "medium")
 
 
 async def test_resolve_agent_model_choice_applies_request_before_profile(monkeypatch) -> None:
+    monkeypatch.setenv("MODEL_GATEWAY_MODELS", _VISION_MODEL)
+
     async def fake_team_default(role: str) -> tuple[str, str]:
         assert role == "agent"
         return _VISION_MODEL, "medium"
@@ -72,11 +82,11 @@ async def test_resolve_agent_model_choice_applies_request_before_profile(monkeyp
 
     model_id, effort = await thread_api._resolve_agent_model_choice(
         {"default_model": _TEXT_ONLY_MODEL, "reasoning_effort": "high"},
-        "anthropic:claude-opus-4-8",
-        "high",
+        _VISION_MODEL,
+        "medium",
     )
 
-    assert (model_id, effort) == ("anthropic:claude-opus-4-8", "high")
+    assert (model_id, effort) == (_VISION_MODEL, "medium")
 
 
 def _new_thread_client(created: dict[str, object]) -> object:
@@ -118,6 +128,7 @@ def _patch_new_thread_deps(monkeypatch, *, profile: dict[str, object]) -> None:
 
 
 async def test_enrich_run_start_command_creates_and_stamps_new_thread(monkeypatch) -> None:
+    monkeypatch.setenv("MODEL_GATEWAY_MODELS", _VISION_MODEL)
     created: dict[str, object] = {}
     _patch_new_thread_deps(monkeypatch, profile={})
     monkeypatch.setattr(thread_api, "langgraph_client", lambda: _new_thread_client(created))
@@ -305,6 +316,7 @@ async def test_proxy_commands_run_start_by_non_owner_is_rejected(monkeypatch) ->
 
 
 async def test_enrich_run_start_command_allowlists_client_configurable(monkeypatch) -> None:
+    monkeypatch.setenv("MODEL_GATEWAY_MODELS", _VISION_MODEL)
     updates: list[dict[str, object]] = []
 
     class FakeThreads:

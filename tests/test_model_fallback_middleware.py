@@ -1,12 +1,9 @@
-"""Tests for ModelFallbackMiddleware."""
+"""Tests for provider-agnostic ModelFallbackMiddleware."""
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import anthropic
-import httpx
-import openai
 import pytest
 from langchain_core.messages import AIMessage
 from on_core.middleware.model_fallback import (
@@ -15,36 +12,21 @@ from on_core.middleware.model_fallback import (
 )
 
 
-def _anthropic_overloaded() -> anthropic.APIStatusError:
-    request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
-    response = httpx.Response(
-        529,
-        request=request,
-        json={"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}},
-    )
-    body = response.json()
-    return anthropic.APIStatusError("Overloaded", response=response, body=body)
+class GatewayError(Exception):
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        body: dict[str, object] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.body = body or {}
 
 
-def _openai_5xx() -> openai.APIStatusError:
-    request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
-    response = httpx.Response(503, request=request, json={"error": {"message": "unavailable"}})
-    return openai.APIStatusError("unavailable", response=response, body=response.json())
-
-
-def _anthropic_model_not_available_error() -> anthropic.BadRequestError:
-    body = {
-        "type": "error",
-        "error": {
-            "type": "invalid_request_error",
-            "message": "In order to access this model, your organization or workspace must have data retention enabled.",
-            "details": {"error_code": "model_not_available"},
-        },
-        "request_id": "req_test",
-    }
-    request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
-    response = httpx.Response(400, request=request, json=body)
-    return anthropic.BadRequestError("model unavailable", response=response, body=body)
+class GatewayTimeoutError(Exception):
+    pass
 
 
 def _make_request() -> MagicMock:
@@ -54,26 +36,29 @@ def _make_request() -> MagicMock:
 
 
 class TestShouldFallback:
-    def test_anthropic_529_overload_falls_back(self) -> None:
-        assert _should_fallback(_anthropic_overloaded()) is True
+    def test_529_overload_falls_back(self) -> None:
+        assert _should_fallback(GatewayError("Overloaded", status_code=529)) is True
 
-    def test_openai_503_falls_back(self) -> None:
-        assert _should_fallback(_openai_5xx()) is True
+    def test_503_falls_back(self) -> None:
+        assert _should_fallback(GatewayError("unavailable", status_code=503)) is True
 
-    def test_anthropic_rate_limit_falls_back(self) -> None:
-        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
-        response = httpx.Response(429, request=request, json={"error": {}})
-        exc = anthropic.RateLimitError("rate", response=response, body={})
-        assert _should_fallback(exc) is True
+    def test_rate_limit_falls_back(self) -> None:
+        assert _should_fallback(GatewayError("rate", status_code=429)) is True
 
-    def test_anthropic_400_does_not_fall_back(self) -> None:
-        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
-        response = httpx.Response(400, request=request, json={"error": {}})
-        exc = anthropic.BadRequestError("bad", response=response, body={})
-        assert _should_fallback(exc) is False
+    def test_timeout_name_falls_back(self) -> None:
+        assert _should_fallback(GatewayTimeoutError("timeout")) is True
+
+    def test_400_does_not_fall_back(self) -> None:
+        assert _should_fallback(GatewayError("bad", status_code=400)) is False
 
     def test_value_error_does_not_fall_back(self) -> None:
         assert _should_fallback(ValueError("nope")) is False
+
+    def test_stream_chunk_timeout_falls_back(self) -> None:
+        class StreamChunkTimeoutError(Exception):
+            pass
+
+        assert _should_fallback(StreamChunkTimeoutError("stalled")) is True
 
 
 class TestModelFallbackMiddleware:
@@ -88,7 +73,7 @@ class TestModelFallbackMiddleware:
         async def handler(req: object) -> object:
             calls.append(req)
             if len(calls) == 1:
-                raise _anthropic_overloaded()
+                raise GatewayError("Overloaded", status_code=529)
             return good_response
 
         request = _make_request()
@@ -118,28 +103,62 @@ class TestModelFallbackMiddleware:
         middleware = ModelFallbackMiddleware(MagicMock())
 
         async def handler(_req: object) -> object:
-            raise _anthropic_model_not_available_error()
+            raise GatewayError(
+                "model unavailable",
+                status_code=404,
+                body={
+                    "error": {
+                        "code": "model_not_found",
+                        "message": "No model named on-auto-coder",
+                    }
+                },
+            )
 
         result = await middleware.awrap_model_call(_make_request(), handler)
 
         assert isinstance(result, AIMessage)
-        assert "selected Anthropic model is not available" in result.text
-        assert "data retention enabled" in result.text
+        assert "selected gateway model is not available" in result.text
+        assert "No model named on-auto-coder" in result.text
 
     @pytest.mark.asyncio
     async def test_async_does_not_double_fall_back(self) -> None:
-        """If the fallback also fails transiently, the error propagates."""
         middleware = ModelFallbackMiddleware(MagicMock())
         calls: list[object] = []
 
         async def handler(req: object) -> object:
             calls.append(req)
-            raise _openai_5xx()
+            raise GatewayError("unavailable", status_code=503)
 
-        with pytest.raises(openai.APIStatusError):
+        with pytest.raises(GatewayError):
             await middleware.awrap_model_call(_make_request(), handler)
 
         assert len(calls) == 2
+
+    @pytest.mark.asyncio
+    async def test_async_tries_multiple_fallbacks_in_order(self) -> None:
+        fallback_1 = MagicMock(name="fallback_1")
+        fallback_2 = MagicMock(name="fallback_2")
+        middleware = ModelFallbackMiddleware([fallback_1, fallback_2])
+        calls: list[object] = []
+        good_response = MagicMock(result=[AIMessage(content="ok from second fallback")])
+
+        async def handler(req: object) -> object:
+            calls.append(req)
+            if len(calls) <= 2:
+                raise GatewayError("unavailable", status_code=503)
+            return good_response
+
+        request = _make_request()
+        override_1 = MagicMock(name="override_1")
+        override_2 = MagicMock(name="override_2")
+        request.override.side_effect = [override_1, override_2]
+
+        result = await middleware.awrap_model_call(request, handler)
+
+        assert result is good_response
+        assert calls == [request, override_1, override_2]
+        assert request.override.call_args_list[0].kwargs == {"model": fallback_1}
+        assert request.override.call_args_list[1].kwargs == {"model": fallback_2}
 
     def test_sync_falls_over_on_overloaded(self) -> None:
         fallback_model = MagicMock(name="fallback_model")
@@ -150,7 +169,7 @@ class TestModelFallbackMiddleware:
         def handler(req: object) -> object:
             calls.append(req)
             if len(calls) == 1:
-                raise _anthropic_overloaded()
+                raise GatewayError("Overloaded", status_code=529)
             return good_response
 
         request = _make_request()

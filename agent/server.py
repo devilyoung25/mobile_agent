@@ -57,11 +57,8 @@ from .utils.authorship import (
     resolve_triggering_user_identity,
 )
 from .utils.model import (
-    DEFAULT_LLM_REASONING,
-    ModelKwargs,
-    fallback_model_id_for,
-    make_model,
-    provider_model_kwargs,
+    create_model_plan,
+    get_gateway_models,
 )
 from .utils.sandbox import create_sandbox
 from .utils.sandbox_paths import aresolve_sandbox_work_dir
@@ -529,25 +526,17 @@ async def get_agent(config: RunnableConfig) -> Pregel:
         subagent_model_id = per_thread_model
         subagent_effort = per_thread_effort
 
-    model_kwargs = provider_model_kwargs(
-        model_id,
-        profile_effort,
+    # Discover per-model capabilities from the gateway (cached, async) and apply
+    # them: context window -> summarization trigger, reasoning effort, output cap.
+    gateway_models = await get_gateway_models()
+    model_plan = create_model_plan(
+        model_id=model_id,
+        effort=profile_effort,
+        subagent_model_id=subagent_model_id,
+        subagent_effort=subagent_effort,
+        models=gateway_models,
         max_tokens=DEFAULT_LLM_MAX_TOKENS,
     )
-    subagent_model_kwargs = provider_model_kwargs(
-        subagent_model_id,
-        subagent_effort,
-        max_tokens=DEFAULT_LLM_MAX_TOKENS,
-    )
-
-    fallback_model_id = os.environ.get("LLM_FALLBACK_MODEL_ID") or fallback_model_id_for(model_id)
-    fallback_model = None
-    if fallback_model_id and fallback_model_id != model_id:
-        fallback_kwargs: ModelKwargs = {"max_tokens": DEFAULT_LLM_MAX_TOKENS}
-        if fallback_model_id.startswith("openai:"):
-            fallback_kwargs["reasoning"] = DEFAULT_LLM_REASONING
-        fallback_model = make_model(fallback_model_id, **fallback_kwargs)
-        logger.info("Configured model fallback %s -> %s", model_id, fallback_model_id)
 
     source = (
         configurable.get("source") if isinstance(configurable.get("source"), str) else "dashboard"
@@ -585,11 +574,9 @@ async def get_agent(config: RunnableConfig) -> Pregel:
     )
 
     logger.info("Returning agent with sandbox for thread %s", thread_id)
-    main_model = make_model(model_id, **model_kwargs)
-    subagent_model = make_model(subagent_model_id, **subagent_model_kwargs)
     return build_engine(
-        model=main_model,
-        subagent_model=subagent_model,
+        model=model_plan.model,
+        subagent_model=model_plan.subagent_model,
         system_prompt=construct_system_prompt(
             working_dir=work_dir,
             triggering_user_identity=triggering_user_identity,
@@ -606,7 +593,6 @@ async def get_agent(config: RunnableConfig) -> Pregel:
             *observability_tools,
         ],
         backend=backend_factory,
-        fallback_model=fallback_model,
         run_limit=MODEL_CALL_RECURSION_LIMIT,
         approval_policy=_approval_policy(),
     ).with_config(config)

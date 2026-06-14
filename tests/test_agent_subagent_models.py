@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -13,7 +14,10 @@ class _DummyAgent:
 
 
 @pytest.mark.asyncio
-async def test_agent_uses_profile_subagent_model_override() -> None:
+async def test_agent_uses_profile_subagent_model_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MODEL_GATEWAY_MODELS", "on-auto-subagent")
     config: RunnableConfig = {
         "configurable": {
             "__is_for_execution__": True,
@@ -24,6 +28,11 @@ async def test_agent_uses_profile_subagent_model_override() -> None:
     }
     main_model = MagicMock(name="main_model")
     subagent_model = MagicMock(name="subagent_model")
+    model_plan = SimpleNamespace(
+        model=main_model,
+        subagent_model=subagent_model,
+        model_id="on-auto-coder",
+    )
     captured: dict[str, object] = {}
 
     def fake_build_engine(**kwargs: object) -> _DummyAgent:
@@ -45,20 +54,20 @@ async def test_agent_uses_profile_subagent_model_override() -> None:
         patch(
             "agent.server.get_team_default_model_pair",
             new_callable=AsyncMock,
-            return_value=(("openai:gpt-5.5", "medium"), ("openai:gpt-5.5", "low")),
+            return_value=(("on-auto-coder", "medium"), ("on-auto-coder", "medium")),
         ),
         patch(
             "agent.server.load_profile",
             new_callable=AsyncMock,
             return_value={
-                "default_model": "anthropic:claude-opus-4-8",
-                "reasoning_effort": "high",
-                "default_subagent_model": "openai:gpt-5.5",
-                "subagent_reasoning_effort": "xhigh",
+                "default_model": "on-auto-coder",
+                "reasoning_effort": "medium",
+                "default_subagent_model": "on-auto-subagent",
+                "subagent_reasoning_effort": "medium",
             },
         ),
-        patch("agent.server.fallback_model_id_for", return_value=None),
-        patch("agent.server.make_model", side_effect=[main_model, subagent_model]) as make_model,
+        patch("agent.server.get_gateway_models", new_callable=AsyncMock, return_value=[]),
+        patch("agent.server.create_model_plan", return_value=model_plan) as create_model_plan,
         patch("agent.server.construct_system_prompt", return_value="prompt"),
         patch("agent.server.build_engine", side_effect=fake_build_engine),
     ):
@@ -67,14 +76,14 @@ async def test_agent_uses_profile_subagent_model_override() -> None:
     assert captured["model"] is main_model
     assert captured["subagent_model"] is subagent_model
 
-    main_call = make_model.call_args_list[0]
-    assert main_call.args == ("anthropic:claude-opus-4-8",)
-    assert main_call.kwargs["thinking"] == {"type": "adaptive", "display": "summarized"}
-    assert main_call.kwargs["effort"] == "high"
-
-    subagent_call = make_model.call_args_list[1]
-    assert subagent_call.args == ("openai:gpt-5.5",)
-    assert subagent_call.kwargs["reasoning"] == {"effort": "xhigh", "summary": "auto"}
+    create_model_plan.assert_called_once_with(
+        model_id="on-auto-coder",
+        effort="medium",
+        subagent_model_id="on-auto-subagent",
+        subagent_effort="medium",
+        models=[],
+        max_tokens=64_000,
+    )
 
 
 @pytest.mark.asyncio
@@ -89,6 +98,11 @@ async def test_agent_subagent_inherits_profile_model_override_without_explicit_p
     }
     main_model = MagicMock(name="main_model")
     subagent_model = MagicMock(name="subagent_model")
+    model_plan = SimpleNamespace(
+        model=main_model,
+        subagent_model=subagent_model,
+        model_id="on-auto-coder",
+    )
     captured: dict[str, object] = {}
 
     def fake_build_engine(**kwargs: object) -> _DummyAgent:
@@ -110,28 +124,29 @@ async def test_agent_subagent_inherits_profile_model_override_without_explicit_p
         patch(
             "agent.server.get_team_default_model_pair",
             new_callable=AsyncMock,
-            return_value=(("openai:gpt-5.5", "medium"), ("openai:gpt-5.5", "low")),
+            return_value=(("on-auto-coder", "medium"), ("on-auto-coder", "medium")),
         ),
         patch(
             "agent.server.load_profile",
             new_callable=AsyncMock,
             return_value={
-                "default_model": "anthropic:claude-opus-4-8",
-                "reasoning_effort": "high",
+                "default_model": "on-auto-coder",
+                "reasoning_effort": "medium",
             },
         ),
-        patch("agent.server.fallback_model_id_for", return_value=None),
-        patch("agent.server.make_model", side_effect=[main_model, subagent_model]) as make_model,
+        patch("agent.server.get_gateway_models", new_callable=AsyncMock, return_value=[]),
+        patch("agent.server.create_model_plan", return_value=model_plan) as create_model_plan,
         patch("agent.server.construct_system_prompt", return_value="prompt"),
         patch("agent.server.build_engine", side_effect=fake_build_engine),
     ):
         await get_agent(config)
 
     assert captured["subagent_model"] is subagent_model
-    assert make_model.call_args_list[0].args == ("anthropic:claude-opus-4-8",)
-    assert make_model.call_args_list[1].args == ("anthropic:claude-opus-4-8",)
-    assert make_model.call_args_list[1].kwargs["thinking"] == {
-        "type": "adaptive",
-        "display": "summarized",
-    }
-    assert make_model.call_args_list[1].kwargs["effort"] == "high"
+    create_model_plan.assert_called_once_with(
+        model_id="on-auto-coder",
+        effort="medium",
+        subagent_model_id="on-auto-coder",
+        subagent_effort="medium",
+        models=[],
+        max_tokens=64_000,
+    )

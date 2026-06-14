@@ -51,7 +51,7 @@ from .oauth import (
     require_session,
     sanitize_redirect_to,
 )
-from .options import supported_models
+from .options import get_gateway_models, supported_models
 from .profiles import (
     ProfileUpdate,
     get_profile,
@@ -307,6 +307,8 @@ async def me(session: dict[str, Any] = _SESSION_DEP) -> dict[str, Any]:
 
 @router.get("/options")
 async def options() -> dict[str, Any]:
+    # Warm the gateway capability cache so the catalog reflects the gateway.
+    await get_gateway_models()
     agent_model, agent_effort = await get_team_default_model("agent")
     subagent_model, subagent_effort = await get_team_default_subagent_model("agent")
     return {

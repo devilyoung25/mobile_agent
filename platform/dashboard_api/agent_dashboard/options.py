@@ -1,16 +1,12 @@
-"""Model options for the dashboard — backed by the model-launcher registry.
-
-The set of selectable models is environment-driven (see
-``model_launcher.registry``): Ollama models from ``OLLAMA_MODELS`` plus cloud
-models whose provider API key is configured. Use the function forms — the
-registry is dynamic, so there are no import-time constant snapshots here.
-"""
+"""Model options for the dashboard — backed by ON Model Gateway registry."""
 
 from __future__ import annotations
 
 from model_launcher import (
     ModelOption,
     default_model_pair,
+    default_subagent_model_pair,
+    get_gateway_models,
     model_supports_effort,
     model_supports_images,
     provider_fallback_pair,
@@ -21,6 +17,8 @@ from model_launcher import (
 __all__ = [
     "ModelOption",
     "default_model_pair",
+    "default_subagent_model_pair",
+    "get_gateway_models",
     "is_supported_model",
     "model_supports_effort",
     "model_supports_images",

@@ -97,10 +97,12 @@ async def test_dashboard_followup_sends_image_content_blocks(
 async def test_dashboard_followup_on_busy_thread_queues_images(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("MODEL_GATEWAY_MODELS", "on-auto-vision")
+    monkeypatch.setenv("MODEL_GATEWAY_IMAGE_MODELS", "on-auto-vision")
     metadata = {
         "source": "dashboard",
         "owner_id": "octocat",
-        "resolved_model": "openai:gpt-5.5",
+        "resolved_model": "on-auto-vision",
     }
     client = _FakeClient(metadata)
     queued_messages: list[object] = []
@@ -143,7 +145,7 @@ async def test_dashboard_followup_on_busy_text_only_thread_rejects_images(
     metadata = {
         "source": "dashboard",
         "owner_id": "octocat",
-        "resolved_model": "fireworks:accounts/fireworks/models/deepseek-v4-pro",
+        "resolved_model": "on-auto-coder",
     }
     client = _FakeClient(metadata)
     queued_messages: list[object] = []
@@ -163,7 +165,7 @@ async def test_dashboard_followup_on_busy_text_only_thread_rejects_images(
             thread_api.ThreadMessageBody(
                 content="continue in web",
                 images=[thread_api.DashboardImageBody(base64="aW1hZ2U=", mimeType="image/png")],
-                model_id="openai:gpt-5.5",
+                model_id="on-auto-vision",
                 effort="medium",
             ),
         )

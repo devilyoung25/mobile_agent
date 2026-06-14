@@ -9,11 +9,18 @@ rm -f "$LOG_DIR"/*.log
 
 cd "$ROOT_DIR"
 
+if [[ -f ".env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source ".env"
+  set +a
+fi
+
 NGROK_CMD="${NGROK_CMD:-ngrok http 2024}"
 BACKEND_FLAGS="${BACKEND_FLAGS:---no-browser --no-reload --port 2024 --tunnel}"
 BACKEND_CMD="${BACKEND_CMD:-uv run langgraph dev $BACKEND_FLAGS}"
 FRONTEND_CMD="${FRONTEND_CMD:-cd apps/dashboard && bun run dev -- --strictPort}"
-OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
+MODEL_GATEWAY_BASE_URL="${MODEL_GATEWAY_BASE_URL:-}"
 DEV_ALL_KILL_PORTS="${DEV_ALL_KILL_PORTS:-0}"
 
 PIDS=()
@@ -107,36 +114,36 @@ echo "🚀 Iniciando ON Mobile Agent dev stack..."
 echo "📝 Logs en: $LOG_DIR"
 echo ""
 
-echo "0/4 Validando puertos..."
+echo "0/3 Validando puertos..."
 require_free_port 2024
 require_free_port 3000
 
-echo "1/4 Verificando Ollama..."
-if curl -fsS "$OLLAMA_HOST/api/tags" >/dev/null 2>&1; then
-  echo "✅ Ollama ya está corriendo en $OLLAMA_HOST"
-else
-  echo "🦙 Iniciando Ollama..."
-  ollama serve > "$LOG_DIR/ollama.log" 2>&1 &
-  PIDS+=("$!")
-
-  for i in {1..20}; do
-    if curl -fsS "$OLLAMA_HOST/api/tags" >/dev/null 2>&1; then
-      echo "✅ Ollama listo"
-      break
-    fi
-    sleep 1
-  done
+echo "1/3 Verificando ON Model Gateway..."
+if [[ -z "$MODEL_GATEWAY_BASE_URL" ]]; then
+  echo "❌ MODEL_GATEWAY_BASE_URL no está configurado."
+  echo "   Levanta ON Model Gateway primero y configura, por ejemplo:"
+  echo "   MODEL_GATEWAY_BASE_URL=http://localhost:4000/v1"
+  exit 1
 fi
 
-echo "2/4 Iniciando ngrok..."
+MODEL_GATEWAY_HEALTH_URL="${MODEL_GATEWAY_BASE_URL%/v1}/health"
+if curl -fsS "$MODEL_GATEWAY_HEALTH_URL" >/dev/null 2>&1; then
+  echo "✅ ON Model Gateway listo en $MODEL_GATEWAY_HEALTH_URL"
+else
+  echo "❌ ON Model Gateway no responde en $MODEL_GATEWAY_HEALTH_URL"
+  echo "   Levanta ON Model Gateway primero y vuelve a ejecutar make dev-all."
+  exit 1
+fi
+
+echo "2/3 Iniciando ngrok..."
 bash -lc "$NGROK_CMD" > "$LOG_DIR/ngrok.log" 2>&1 &
 PIDS+=("$!")
 
-echo "3/4 Iniciando backend..."
+echo "3/3 Iniciando backend..."
 bash -lc "$BACKEND_CMD" > "$LOG_DIR/backend.log" 2>&1 &
 PIDS+=("$!")
 
-echo "4/4 Iniciando frontend..."
+echo "Iniciando frontend..."
 bash -lc "$FRONTEND_CMD" > "$LOG_DIR/frontend.log" 2>&1 &
 PIDS+=("$!")
 
@@ -151,7 +158,7 @@ echo "✅ Todo iniciado"
 echo ""
 echo "Backend:  http://localhost:2024"
 echo "Frontend: http://localhost:3000"
-echo "Ollama:   $OLLAMA_HOST"
+echo "Gateway:  $MODEL_GATEWAY_BASE_URL"
 echo "ngrok:    mira $LOG_DIR/ngrok.log"
 echo ""
 echo "Presiona Ctrl+C para apagar todo."

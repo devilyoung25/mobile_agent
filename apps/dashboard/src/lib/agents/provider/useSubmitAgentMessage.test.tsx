@@ -87,7 +87,7 @@ describe("useSubmitAgentMessage", () => {
     const response = await result.current.mutateAsync({
       content: "primer mensaje",
       images: [],
-      model_id: "openai:gpt-5.5",
+      model_id: "on-auto-coder",
       effort: "medium",
     });
 
@@ -96,7 +96,7 @@ describe("useSubmitAgentMessage", () => {
       {
         config: {
           configurable: {
-            agent_model_id: "openai:gpt-5.5",
+            agent_model_id: "on-auto-coder",
             agent_effort: "medium",
           },
         },
