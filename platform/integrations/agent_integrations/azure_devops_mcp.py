@@ -1,8 +1,10 @@
 """Azure DevOps MCP composition: Entra-minted bearer + the ADO toolset preset."""
 
 import logging
+import os
 from typing import Any
 
+import httpx
 from integration_azure_devops import (
     AZURE_DEVOPS_PROMPT_FRAGMENT,
     DEFAULT_AZURE_DEVOPS_DOMAINS,
@@ -14,6 +16,9 @@ from integration_azure_devops import (
 
 logger = logging.getLogger(__name__)
 
+_SCOPE_API_VERSION = "7.1"
+_SCOPE_TIMEOUT = httpx.Timeout(15.0)
+
 __all__ = [
     "AZURE_DEVOPS_PROMPT_FRAGMENT",
     "DEFAULT_AZURE_DEVOPS_DOMAINS",
@@ -22,6 +27,7 @@ __all__ = [
     "is_azure_devops_read_only_tool",
     "load_azure_devops_read_only_tools",
     "load_azure_devops_tools_for_actor",
+    "resolve_actor_scope",
 ]
 
 
@@ -47,3 +53,57 @@ async def load_azure_devops_tools_for_actor(actor_id: str | None) -> list[Any]:
             actor_id,
         )
     return await load_azure_devops_read_only_tools(bearer_token=bearer_token)
+
+
+async def resolve_actor_scope(actor_id: str | None) -> list[str]:
+    """Azure DevOps project names the actor can access — their run scope.
+
+    Composition uses this to scope project-aware MCPs (e.g. the Business Knowledge
+    MCP serves only content for projects the actor can see). The access check is
+    real (the actor's own Entra->ADO token); content curation is a separate concern.
+
+    Self-contained on purpose: the agentic plane must not depend on the dashboard
+    control-plane (``dashboard_api``). Fail-soft — returns ``[]`` when there is no
+    actor, no org configured, no token, or the listing fails, so a missing scope
+    never breaks a run (it just yields no project-scoped content).
+    """
+    if not actor_id:
+        return []
+    org = os.environ.get("AZURE_DEVOPS_MCP_ORG", "").strip()
+    if not org:
+        return []
+
+    try:
+        from identity_entra.tokens import get_azure_devops_access_token
+
+        token = await get_azure_devops_access_token(actor_id)
+    except Exception:
+        logger.warning("Could not mint Azure DevOps token for scope of %s", actor_id, exc_info=True)
+        return []
+    if not token:
+        return []
+
+    try:
+        async with httpx.AsyncClient(timeout=_SCOPE_TIMEOUT) as client:
+            response = await client.get(
+                f"https://dev.azure.com/{org}/_apis/projects",
+                params={"api-version": _SCOPE_API_VERSION, "$top": 200},
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            )
+            response.raise_for_status()
+            payload = response.json()
+    except Exception:
+        logger.warning("Could not list Azure DevOps projects for %s", actor_id, exc_info=True)
+        return []
+
+    values = payload.get("value") if isinstance(payload, dict) else None
+    if not isinstance(values, list):
+        return []
+    names = {
+        project["name"].strip()
+        for project in values
+        if isinstance(project, dict)
+        and isinstance(project.get("name"), str)
+        and project["name"].strip()
+    }
+    return sorted(names)
