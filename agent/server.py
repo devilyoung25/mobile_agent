@@ -25,6 +25,7 @@ from deepagents import create_deep_agent
 from deepagents.backends.protocol import SandboxBackendProtocol
 from langchain.agents.middleware.human_in_the_loop import InterruptOnConfig
 from langsmith.sandbox import SandboxClientError
+from mcp_toolset import load_tools_for
 from on_core import DEFAULT_RECURSION_LIMIT, MODEL_CALL_RECURSION_LIMIT, build_engine
 
 from .dashboard.admin import is_observability_authorized
@@ -39,7 +40,7 @@ from .dashboard.options import is_supported_model, model_supports_effort
 from .dashboard.team_settings import get_team_default_model_pair, get_team_default_repo
 from .integrations.azure_devops_mcp import (
     AZURE_DEVOPS_PROMPT_FRAGMENT,
-    load_azure_devops_tools_for_actor,
+    resolve_actor_scope,
 )
 from .integrations.datadog_mcp import load_datadog_tools
 from .integrations.devcontainer_worktree import create_devcontainer_worktree_sandbox
@@ -432,16 +433,27 @@ def _http_request_mutates(request: Any) -> bool:
     return method in _MUTATING_HTTP_METHODS
 
 
-def _approval_policy() -> dict[str, Any]:
+def _capability_meta(tool: Any) -> dict[str, Any]:
+    """Non-sensitive capability metadata attached by the Capability Gateway."""
+    meta = getattr(tool, "metadata", None)
+    cap = meta.get("capability") if isinstance(meta, dict) else None
+    return cap if isinstance(cap, dict) else {}
+
+
+def _has_azure_devops(tools: list[Any]) -> bool:
+    """True when the resolved capability tools include the Azure DevOps origin."""
+    return any("azure-devops" in _capability_meta(tool).get("provenance_tags", []) for tool in tools)
+
+
+def _approval_policy(gateway_tools: list[Any] | None = None) -> dict[str, Any]:
     """Human-approval gate policy (brand-neutral ``interrupt_on`` for the engine).
 
-    Today the only persistent action the agent can attempt is a state-changing
-    HTTP call (Azure DevOps writes are filtered out entirely), so we gate
-    ``http_request`` on mutating methods — reads pass through untouched. When a
-    controlled Azure DevOps write tool is enabled, add it to this mapping; the
-    engine's gate mechanism stays the same.
+    Gates a state-changing ``http_request`` on mutating methods (reads pass
+    through), plus any Capability Gateway tool whose descriptor declared
+    ``requires_approval``. The gate mechanism lives in the neutral engine; the
+    Capability Gateway is the source of truth for *which* capabilities need it.
     """
-    return {
+    policy: dict[str, Any] = {
         "http_request": InterruptOnConfig(
             allowed_decisions=["approve", "reject"],
             when=_http_request_mutates,
@@ -451,6 +463,24 @@ def _approval_policy() -> dict[str, Any]:
             ),
         )
     }
+    for tool in gateway_tools or []:
+        if _capability_meta(tool).get("requires_approval"):
+            policy[tool.name] = InterruptOnConfig(
+                allowed_decisions=["approve", "reject"],
+                description=(
+                    f"This invokes the gated capability '{tool.name}' (a persistent "
+                    "action) and requires human approval before it runs."
+                ),
+            )
+    return policy
+
+
+def _domain_pack(configurable: dict[str, Any]) -> str:
+    """Domain pack for this run (per-run override → env → default ``mobile``)."""
+    pack = configurable.get("domain_pack")
+    if isinstance(pack, str) and pack.strip():
+        return pack.strip()
+    return os.environ.get("ON_MOBILE_AGENT_DOMAIN_PACK", "mobile")
 
 
 async def get_agent(config: RunnableConfig) -> Pregel:
@@ -581,9 +611,17 @@ async def get_agent(config: RunnableConfig) -> Pregel:
     repo_custom_instructions = await _resolve_repo_custom_instructions(prompt_default_repo)
 
     observability_authorized = _observability_authorized(config)
-    azure_devops_tools, observability_tools = await asyncio.gather(
-        load_azure_devops_tools_for_actor(actor_id),
+    # Capability Gateway: composition resolves the actor's project scope, then asks
+    # the gateway for governed, resolved tools for this domain pack. Credentials and
+    # provider detail stay inside the gateway; the engine only sees the tools.
+    project_scope, observability_tools = await asyncio.gather(
+        resolve_actor_scope(actor_id),
         _load_observability_tools(observability_authorized),
+    )
+    gateway_tools = await load_tools_for(
+        actor_id,
+        domain_pack=_domain_pack(configurable),
+        project_scope=project_scope,
     )
 
     logger.info("Returning agent with sandbox for thread %s", thread_id)
@@ -596,17 +634,17 @@ async def get_agent(config: RunnableConfig) -> Pregel:
             default_repo=prompt_default_repo,
             repo_custom_instructions=repo_custom_instructions,
             mode="workspace" if workspace_path else "consultative",
-            integration_policy=AZURE_DEVOPS_PROMPT_FRAGMENT if azure_devops_tools else None,
+            integration_policy=AZURE_DEVOPS_PROMPT_FRAGMENT if _has_azure_devops(gateway_tools) else None,
         ),
         tools=[
             http_request,
             fetch_url,
             web_search,
-            *azure_devops_tools,
+            *gateway_tools,
             *observability_tools,
         ],
         backend=backend_factory,
         run_limit=MODEL_CALL_RECURSION_LIMIT,
-        approval_policy=_approval_policy(),
+        approval_policy=_approval_policy(gateway_tools),
         recreate_sandbox=_recreate_sandbox_for_thread,
     ).with_config(config)
