@@ -28,6 +28,7 @@ from mcp_toolset import load_tools_for
 from on_core import DEFAULT_RECURSION_LIMIT, MODEL_CALL_RECURSION_LIMIT, build_engine
 
 from .composition.approval_resolution import _approval_policy, _has_azure_devops
+from .composition.model_resolution import resolve_model_plan
 from .composition.prompt_resolution import (
     _resolve_prompt_default_repo,
     _resolve_repo_custom_instructions,
@@ -39,12 +40,9 @@ from .composition.tool_resolution import (
 )
 from .dashboard.agent_overrides import (
     load_profile,
-    normalize_profile_overrides,
-    normalize_profile_subagent_overrides,
     resolve_actor_id,
 )
 from .dashboard.agent_usage import record_agent_thread_usage
-from .dashboard.options import is_supported_model, model_supports_effort
 from .dashboard.team_settings import get_team_default_model_pair
 from .integrations.azure_devops_mcp import (
     AZURE_DEVOPS_PROMPT_FRAGMENT,
@@ -62,10 +60,6 @@ from .utils.authorship import (
     AGENT_BOT_EMAIL,
     AGENT_BOT_NAME,
     resolve_triggering_user_identity,
-)
-from .utils.model import (
-    create_model_plan,
-    get_gateway_models,
 )
 from .utils.sandbox import create_sandbox
 from .utils.sandbox_paths import aresolve_sandbox_work_dir
@@ -355,9 +349,6 @@ async def ensure_sandbox_for_thread(thread_id: str) -> SandboxBackendProtocol:
     return sandbox_backend
 
 
-DEFAULT_LLM_MAX_TOKENS = 64_000
-
-
 def _get_cached_sandbox_backend(thread_id: str) -> SandboxBackendProtocol:
     sandbox_backend = SANDBOX_BACKENDS.get(thread_id)
     if sandbox_backend is None:
@@ -399,68 +390,8 @@ async def get_agent(config: RunnableConfig) -> Pregel:
     def backend_factory(_runtime: object, _thread_id: str = thread_id) -> SandboxBackendProtocol:
         return _get_cached_sandbox_backend(_thread_id)
 
-    (model_id, profile_effort), (subagent_model_id, subagent_effort) = team_defaults
-    logger.info("Using team default agent model: model=%s effort=%s", model_id, profile_effort)
-    logger.info(
-        "Using team default agent subagent model: model=%s effort=%s",
-        subagent_model_id,
-        subagent_effort,
-    )
-
-    if actor_id and profile:
-        overridden_model, overridden_effort = normalize_profile_overrides(profile)
-        if overridden_model:
-            logger.info(
-                "Applying dashboard profile override for %s: model=%s effort=%s",
-                actor_id,
-                overridden_model,
-                overridden_effort,
-            )
-            model_id = overridden_model
-            profile_effort = overridden_effort
-            subagent_model_id = overridden_model
-            subagent_effort = overridden_effort
-        overridden_subagent_model, overridden_subagent_effort = (
-            normalize_profile_subagent_overrides(profile)
-        )
-        if overridden_subagent_model:
-            logger.info(
-                "Applying dashboard profile subagent override for %s: model=%s effort=%s",
-                actor_id,
-                overridden_subagent_model,
-                overridden_subagent_effort,
-            )
-            subagent_model_id = overridden_subagent_model
-            subagent_effort = overridden_subagent_effort
-
-    per_thread_model = configurable.get("agent_model_id")
-    per_thread_effort = configurable.get("agent_effort")
-    if (
-        isinstance(per_thread_model, str)
-        and is_supported_model(per_thread_model)
-        and isinstance(per_thread_effort, str)
-        and model_supports_effort(per_thread_model, per_thread_effort)
-    ):
-        logger.info(
-            "Applying per-thread model override: model=%s effort=%s",
-            per_thread_model,
-            per_thread_effort,
-        )
-        model_id = per_thread_model
-        profile_effort = per_thread_effort
-        subagent_model_id = per_thread_model
-        subagent_effort = per_thread_effort
-
-    # Discover per-model capabilities from the gateway (cached, async) and apply
-    # them: context window -> summarization trigger, reasoning effort, output cap.
-    gateway_models = await get_gateway_models()
-    model_plan = create_model_plan(
-        model_id=model_id,
-        effort=profile_effort,
-        subagent_model_id=subagent_model_id,
-        subagent_effort=subagent_effort,
-        models=gateway_models,
-        max_tokens=DEFAULT_LLM_MAX_TOKENS,
+    model_plan, model_id, profile_effort = await resolve_model_plan(
+        actor_id, profile, team_defaults, configurable
     )
 
     source = (

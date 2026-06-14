@@ -65,8 +65,8 @@ async def test_engine_run_uses_actor_identity_and_azure_devops_tools() -> None:
         patch("agent.server.load_profile", new_callable=AsyncMock, return_value={}) as load_profile,
         patch("agent.server.client") as fake_client,
         patch("agent.server.record_agent_thread_usage", new_callable=AsyncMock) as record_usage,
-        patch("agent.server.get_gateway_models", new_callable=AsyncMock, return_value=[]),
-        patch("agent.server.create_model_plan", return_value=model_plan),
+        patch("agent.composition.model_resolution.get_gateway_models", new_callable=AsyncMock, return_value=[]),
+        patch("agent.composition.model_resolution.create_model_plan", return_value=model_plan),
         patch("agent.server.construct_system_prompt", return_value="prompt") as prompt,
         patch("agent.server.resolve_actor_scope", new_callable=AsyncMock, return_value=["AppMovil"]),
         patch(

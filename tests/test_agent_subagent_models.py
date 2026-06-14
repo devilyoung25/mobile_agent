@@ -66,8 +66,8 @@ async def test_agent_uses_profile_subagent_model_override(
                 "subagent_reasoning_effort": "medium",
             },
         ),
-        patch("agent.server.get_gateway_models", new_callable=AsyncMock, return_value=[]),
-        patch("agent.server.create_model_plan", return_value=model_plan) as create_model_plan,
+        patch("agent.composition.model_resolution.get_gateway_models", new_callable=AsyncMock, return_value=[]),
+        patch("agent.composition.model_resolution.create_model_plan", return_value=model_plan) as create_model_plan,
         patch("agent.server.construct_system_prompt", return_value="prompt"),
         patch("agent.server.build_engine", side_effect=fake_build_engine),
     ):
@@ -134,8 +134,8 @@ async def test_agent_subagent_inherits_profile_model_override_without_explicit_p
                 "reasoning_effort": "medium",
             },
         ),
-        patch("agent.server.get_gateway_models", new_callable=AsyncMock, return_value=[]),
-        patch("agent.server.create_model_plan", return_value=model_plan) as create_model_plan,
+        patch("agent.composition.model_resolution.get_gateway_models", new_callable=AsyncMock, return_value=[]),
+        patch("agent.composition.model_resolution.create_model_plan", return_value=model_plan) as create_model_plan,
         patch("agent.server.construct_system_prompt", return_value="prompt"),
         patch("agent.server.build_engine", side_effect=fake_build_engine),
     ):
