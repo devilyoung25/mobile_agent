@@ -65,11 +65,15 @@ class TestSanitizeThinkingBlocksMiddleware:
         assert result is response
         assert message.content == [{"type": "text", "text": "ok"}]
 
-    def test_ignores_non_anthropic_models(self) -> None:
-        thinking_block = {"type": "thinking", "signature": "abc", "thinking": ""}
-        message = AIMessage(content=[thinking_block, {"type": "text", "text": "ok"}])
+    def test_drops_empty_thinking_block_regardless_of_model(self) -> None:
+        # Provider-neutral: empty thinking blocks are dropped for any model, not
+        # just Anthropic. (For OpenAI-style string content it is a no-op.)
+        message = AIMessage(content=[
+            {"type": "thinking", "signature": "abc", "thinking": ""},
+            {"type": "text", "text": "ok"},
+        ])
         request = _make_request([message], model=MagicMock())
 
         SanitizeThinkingBlocksMiddleware().wrap_model_call(request, lambda req: MagicMock())
 
-        assert message.content == [thinking_block, {"type": "text", "text": "ok"}]
+        assert message.content == [{"type": "text", "text": "ok"}]

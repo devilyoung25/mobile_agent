@@ -46,7 +46,11 @@ def _sandbox_error_message(tool_call_id: str, sandbox_id: str = "sb-dead") -> To
 
 @pytest.mark.asyncio
 async def test_sandbox_client_error_recreates_sandbox() -> None:
-    middleware = ToolErrorMiddleware()
+    # The engine receives sandbox recreation as an injected composition callback
+    # (no engine->composition import); inject the real one so this exercises it.
+    from agent.server import _recreate_sandbox_for_thread
+
+    middleware = ToolErrorMiddleware(recreate_sandbox=_recreate_sandbox_for_thread)
     request = _tool_request()
     old_backend = FakeSandboxBackend()
     backend = FakeSandboxBackend()

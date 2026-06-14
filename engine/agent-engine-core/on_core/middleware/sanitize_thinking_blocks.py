@@ -1,4 +1,10 @@
-"""Middleware that removes malformed Anthropic thinking blocks before model calls."""
+"""Middleware that removes malformed (empty) thinking blocks before model calls.
+
+Provider-neutral: it drops empty ``{"type": "thinking"}`` blocks from assistant
+message content regardless of the model. This is a no-op for providers that never
+emit such blocks (e.g. OpenAI-style string content), so the engine stays neutral —
+it no longer needs to know which provider is behind the model.
+"""
 
 from __future__ import annotations
 
@@ -7,25 +13,7 @@ from typing import Any
 
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelCallResult, ModelRequest, ModelResponse
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import AIMessage
-
-
-def _is_chat_anthropic(model: object) -> bool:
-    seen: set[int] = set()
-    current = model
-    for _ in range(10):
-        if isinstance(current, ChatAnthropic):
-            return True
-        current_id = id(current)
-        if current_id in seen:
-            return False
-        seen.add(current_id)
-        bound = getattr(current, "bound", None)
-        if bound is None or bound is current:
-            return False
-        current = bound
-    return False
 
 
 def _sanitize_messages(messages: list[Any]) -> None:
@@ -46,15 +34,14 @@ def _sanitize_messages(messages: list[Any]) -> None:
 
 
 class SanitizeThinkingBlocksMiddleware(AgentMiddleware):
-    """Drop empty Anthropic thinking blocks before provider validation."""
+    """Drop empty thinking blocks before provider validation (provider-neutral)."""
 
     def wrap_model_call(
         self,
         request: ModelRequest,
         handler: Callable[[ModelRequest], ModelResponse],
     ) -> ModelCallResult:
-        if _is_chat_anthropic(request.model):
-            _sanitize_messages(request.messages)
+        _sanitize_messages(request.messages)
         return handler(request)
 
     async def awrap_model_call(
@@ -62,6 +49,5 @@ class SanitizeThinkingBlocksMiddleware(AgentMiddleware):
         request: ModelRequest,
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> Any:
-        if _is_chat_anthropic(request.model):
-            _sanitize_messages(request.messages)
+        _sanitize_messages(request.messages)
         return await handler(request)

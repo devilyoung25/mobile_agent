@@ -8,7 +8,7 @@ tool list, an already-rendered system prompt, and a sandbox backend factory
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
 from deepagents import create_deep_agent
@@ -51,6 +51,7 @@ def build_engine(
     fallback_model: BaseChatModel | None = None,
     run_limit: int = MODEL_CALL_RECURSION_LIMIT,
     approval_policy: dict[str, Any] | None = None,
+    recreate_sandbox: Callable[[str], Awaitable[str]] | None = None,
 ):
     """Assemble the deep agent with the engine's standard middleware stack.
 
@@ -76,7 +77,7 @@ def build_engine(
             SanitizeToolInputsMiddleware(),
             *approval_middleware,
             ModelCallLimitMiddleware(run_limit=run_limit, exit_behavior="end"),
-            ToolErrorMiddleware(),
+            ToolErrorMiddleware(recreate_sandbox),
             ToolArtifactMiddleware(),
             # Drains follow-up messages queued mid-run (Store ("queue", thread_id))
             # and injects them before the next model call. Upstream placed it here,

@@ -113,25 +113,10 @@ def _get_thread_id(request: ToolCallRequest) -> str | None:
     return thread_id if isinstance(thread_id, str) and thread_id else None
 
 
-async def _recreate_sandbox_for_thread(thread_id: str) -> str:
-    from agent.server import _configure_git_identity, _recreate_sandbox, client
-    from agent.utils.sandbox_state import set_sandbox_backend
-
-    sandbox_backend = await _recreate_sandbox(thread_id)
-    sandbox_backend = set_sandbox_backend(thread_id, sandbox_backend)
-    await client.threads.update(thread_id=thread_id, metadata={"sandbox_id": sandbox_backend.id})
-    await _configure_git_identity(sandbox_backend)
-    return sandbox_backend.id
-
-
-def _recreate_sandbox_for_thread_sync(thread_id: str) -> str:
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(_recreate_sandbox_for_thread(thread_id))
-    raise RuntimeError(
-        "Cannot recreate sandbox from a sync tool call while an event loop is running"
-    )
+# Recreating a sandbox is a composition concern (it owns the sandbox backends,
+# the LangGraph client, and git identity). The neutral engine receives it as an
+# injected callback instead of importing the composition app.
+SandboxRecreator = Callable[[str], Awaitable[str]]
 
 
 def _sandbox_recreated_tool_message(
@@ -166,6 +151,21 @@ class ToolErrorMiddleware(AgentMiddleware):
 
     state_schema = AgentState
 
+    def __init__(self, recreate_sandbox: SandboxRecreator | None = None) -> None:
+        super().__init__()
+        self._recreate_sandbox = recreate_sandbox
+
+    def _recreate_sandbox_sync(self, thread_id: str) -> str:
+        if self._recreate_sandbox is None:
+            raise RuntimeError("No sandbox recreator configured")
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self._recreate_sandbox(thread_id))
+        raise RuntimeError(
+            "Cannot recreate sandbox from a sync tool call while an event loop is running"
+        )
+
     def wrap_tool_call(
         self,
         request: ToolCallRequest,
@@ -176,9 +176,9 @@ class ToolErrorMiddleware(AgentMiddleware):
         except SandboxClientError as e:
             logger.exception("Sandbox error during tool call handling; request=%r", request)
             thread_id = _get_thread_id(request)
-            if thread_id:
+            if thread_id and self._recreate_sandbox is not None:
                 try:
-                    sandbox_id = _recreate_sandbox_for_thread_sync(thread_id)
+                    sandbox_id = self._recreate_sandbox_sync(thread_id)
                     return _sandbox_recreated_tool_message(e, sandbox_id, request)
                 except Exception:
                     logger.exception("Failed to recreate sandbox for thread %s", thread_id)
@@ -197,9 +197,9 @@ class ToolErrorMiddleware(AgentMiddleware):
         except SandboxClientError as e:
             logger.exception("Sandbox error during tool call handling; request=%r", request)
             thread_id = _get_thread_id(request)
-            if thread_id:
+            if thread_id and self._recreate_sandbox is not None:
                 try:
-                    sandbox_id = await _recreate_sandbox_for_thread(thread_id)
+                    sandbox_id = await self._recreate_sandbox(thread_id)
                     return _sandbox_recreated_tool_message(e, sandbox_id, request)
                 except Exception:
                     logger.exception("Failed to recreate sandbox for thread %s", thread_id)

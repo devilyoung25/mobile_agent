@@ -33,17 +33,11 @@ FORBIDDEN_TOP_LEVEL = {
     "agent",  # the composition app
 }
 
-# Pre-existing leaks tracked as debt to remove (see GW follow-up "de-leak engine").
-# This allowlist keeps the guard active for everything else: any NEW leak, or these
-# files importing a DIFFERENT forbidden module, still fails. Keep it shrinking only.
-KNOWN_LEAKS: dict[str, set[str]] = {
-    # Anthropic-specific thinking-block handling; likely dead now that all models go
-    # through the OpenAI-compatible gateway (ChatOpenAI). Remove when confirmed unused.
-    "middleware/sanitize_thinking_blocks.py": {"langchain_anthropic"},
-    # Function-level `from agent.server import ...` — an inverted engine->composition
-    # dependency. Invert it (inject the helpers) to drop this.
-    "middleware/tool_error_handler.py": {"agent"},
-}
+# Pre-existing leaks tracked as debt to remove. Keep this shrinking only: any NEW
+# leak, or an allowlisted file importing a DIFFERENT forbidden module, still fails.
+# (Both original leaks — sanitize_thinking_blocks->langchain_anthropic and
+# tool_error_handler->agent.server — were removed; the engine is now fully neutral.)
+KNOWN_LEAKS: dict[str, set[str]] = {}
 
 
 def _imported_top_levels(path: Path) -> set[str]:

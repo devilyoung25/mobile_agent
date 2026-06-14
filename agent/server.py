@@ -141,6 +141,19 @@ async def _recreate_sandbox(thread_id: str) -> SandboxBackendProtocol:
     return sandbox_backend
 
 
+async def _recreate_sandbox_for_thread(thread_id: str) -> str:
+    """Composition-side sandbox recreation injected into the neutral engine.
+
+    Passed to ``build_engine(recreate_sandbox=...)`` so ``ToolErrorMiddleware`` can
+    recover from a ``SandboxClientError`` without the engine importing this module.
+    """
+    sandbox_backend = await _recreate_sandbox(thread_id)
+    sandbox_backend = set_sandbox_backend(thread_id, sandbox_backend)
+    await client.threads.update(thread_id=thread_id, metadata={"sandbox_id": sandbox_backend.id})
+    await _configure_git_identity(sandbox_backend)
+    return sandbox_backend.id
+
+
 async def check_or_recreate_sandbox(
     sandbox_backend: SandboxBackendProtocol,
     thread_id: str,
@@ -595,4 +608,5 @@ async def get_agent(config: RunnableConfig) -> Pregel:
         backend=backend_factory,
         run_limit=MODEL_CALL_RECURSION_LIMIT,
         approval_policy=_approval_policy(),
+        recreate_sandbox=_recreate_sandbox_for_thread,
     ).with_config(config)
