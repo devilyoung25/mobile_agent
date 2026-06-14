@@ -66,6 +66,8 @@ FORBIDDEN_SNIPPETS = (
     "/private/etc/",
     "rm -rf /",
     "rm -fr /",
+    "rm -rf .",
+    "rm -fr .",
 )
 
 ABSOLUTE_PATH_RE = re.compile(r"(?<![\w.-])(/[^\s'\";|&()<>]+)")
@@ -107,6 +109,54 @@ def _iter_executables(tokens: list[str]):
     return None
 
 
+_GIT_OPTIONS_WITH_VALUE = {
+    "-C",
+    "-c",
+    "--config-env",
+    "--git-dir",
+    "--namespace",
+    "--work-tree",
+}
+_FORBIDDEN_GIT_SUBCOMMANDS = {
+    "checkout",
+    "clean",
+    "push",
+    "remote",
+    "reset",
+    "switch",
+    "worktree",
+}
+
+
+def _git_policy_error(tokens: list[str]) -> str | None:
+    for index, token in enumerate(tokens):
+        if Path(token).name != "git":
+            continue
+
+        subcommand_index = index + 1
+        while subcommand_index < len(tokens):
+            candidate = tokens[subcommand_index]
+            if candidate in _GIT_OPTIONS_WITH_VALUE:
+                subcommand_index += 2
+                continue
+            if candidate.startswith("-"):
+                subcommand_index += 1
+                continue
+            break
+
+        if subcommand_index >= len(tokens):
+            continue
+
+        subcommand = tokens[subcommand_index]
+        if subcommand in _FORBIDDEN_GIT_SUBCOMMANDS:
+            return "Command blocked by local worktree policy: dangerous git operation."
+        if subcommand == "branch":
+            branch_args = tokens[subcommand_index + 1 :]
+            if any(arg in {"-d", "-D", "--delete"} for arg in branch_args):
+                return "Command blocked by local worktree policy: dangerous git operation."
+    return None
+
+
 def _validate_command(command: str, root_dir: Path) -> str | None:
     stripped = command.strip()
     if not stripped:
@@ -126,9 +176,9 @@ def _validate_command(command: str, root_dir: Path) -> str | None:
         if executable in FORBIDDEN_EXECUTABLES:
             return f"Command blocked by local worktree policy: '{executable}' is not allowed."
 
-    joined = " ".join(tokens)
-    if "git push" in joined or "git reset --hard" in joined or "git clean " in joined:
-        return "Command blocked by local worktree policy: dangerous git operation."
+    git_error = _git_policy_error(tokens)
+    if git_error:
+        return git_error
 
     for token in tokens:
         if token == "~" or token.startswith("~/"):

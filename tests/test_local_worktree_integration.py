@@ -45,6 +45,14 @@ def test_local_worktree_executes_from_root_dir(tmp_path):
         "cd .. && pwd",
         "git push origin HEAD",
         "git reset --hard HEAD",
+        "git clean -fd",
+        "git switch main",
+        "git checkout main",
+        "git worktree list",
+        "git remote -v",
+        "git branch -D old-branch",
+        "rm -rf .",
+        "rm -fr ./build",
         "sudo ls",
         "echo $HOME",
     ],
@@ -65,3 +73,28 @@ def test_local_worktree_allows_common_git_revision_syntax(tmp_path):
 
     assert result.exit_code == 0
     assert "HEAD~1" in result.output
+
+
+def test_local_worktree_allows_read_only_git_commands(tmp_path):
+    backend = create_local_worktree_sandbox(root_dir=tmp_path)
+
+    init = backend.execute("git init")
+    result = backend.execute("git status --short")
+
+    assert init.exit_code == 0
+    assert result.exit_code == 0
+
+
+def test_local_worktree_allows_git_commit(tmp_path):
+    backend = create_local_worktree_sandbox(root_dir=tmp_path)
+
+    result = backend.execute(
+        "git init && "
+        "git config user.name Test && "
+        "git config user.email test@example.com && "
+        "printf 'hello\\n' > README.md && "
+        "git add README.md && "
+        "git commit -m init"
+    )
+
+    assert result.exit_code == 0

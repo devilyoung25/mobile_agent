@@ -80,8 +80,62 @@ def _safe_remote_url(url: str | None) -> str | None:
 
 
 def _is_azure_devops_remote(url: str | None) -> bool:
-    normalized = (url or "").strip().lower()
-    return "dev.azure.com" in normalized or ".visualstudio.com" in normalized
+    normalized = (url or "").strip()
+    if not normalized:
+        return False
+    try:
+        parsed = urlsplit(normalized)
+    except ValueError:
+        return False
+    host = (parsed.hostname or "").lower()
+    return host in {"dev.azure.com", "ssh.dev.azure.com"} or host.endswith(
+        ".visualstudio.com"
+    )
+
+
+def _azure_devops_org_from_remote(url: str | None) -> str | None:
+    normalized = (url or "").strip()
+    if not normalized:
+        return None
+    try:
+        parsed = urlsplit(normalized)
+    except ValueError:
+        return None
+
+    host = (parsed.hostname or "").lower()
+    if host == "dev.azure.com":
+        parts = [part for part in parsed.path.split("/") if part]
+        return parts[0].lower() if parts else None
+    if host == "ssh.dev.azure.com":
+        parts = [part for part in parsed.path.split("/") if part]
+        return parts[1].lower() if len(parts) >= 2 and parts[0].lower() == "v3" else None
+    if host.endswith(".visualstudio.com"):
+        return host.removesuffix(".visualstudio.com").lower() or None
+    return None
+
+
+def _configured_azure_devops_org() -> str | None:
+    configured = os.environ.get("AZURE_DEVOPS_MCP_ORG", "").strip()
+    if not configured:
+        return None
+    # The rest of the app expects an organization slug, but accepting a URL here
+    # makes local env mistakes fail closed instead of silently bypassing the check.
+    return (_azure_devops_org_from_remote(configured) or configured).strip().lower() or None
+
+
+def _validate_azure_devops_remote(url: str | None) -> None:
+    if not _is_azure_devops_remote(url):
+        raise HTTPException(422, "workspace_path_not_azure_repo")
+    configured_org = _configured_azure_devops_org()
+    if not configured_org:
+        return
+    remote_org = _azure_devops_org_from_remote(url)
+    if remote_org != configured_org:
+        raise HTTPException(422, "workspace_path_wrong_azure_org")
+
+
+def _allow_dirty_workspace() -> bool:
+    return _truthy(os.environ.get("ON_MOBILE_AGENT_ALLOW_DIRTY_WORKSPACE"))
 
 
 def _run_git(path: Path, *args: str) -> str:
@@ -114,7 +168,9 @@ def _worktree_root() -> Path:
 
 def _worktree_branch(thread_id: str) -> str:
     safe = re.sub(r"[^a-zA-Z0-9._-]+", "-", thread_id).strip("-")
-    return f"on-mobile-agent/{safe[:18] or 'run'}"
+    prefix = (safe or "run")[:24].strip("-") or "run"
+    digest = hashlib.sha256(thread_id.encode()).hexdigest()[:8]
+    return f"on-mobile-agent/{prefix}-{digest}"
 
 
 def _worktree_path(workspace_id: str, thread_id: str) -> Path:
@@ -149,8 +205,7 @@ def _validate_workspace(actor_id: str, body: WorkspaceCreate) -> dict[str, Any]:
         remote_url = _run_git(root, "remote", "get-url", "origin")
     except HTTPException as exc:
         raise HTTPException(422, "workspace_path_missing_origin") from exc
-    if not _is_azure_devops_remote(remote_url):
-        raise HTTPException(422, "workspace_path_not_azure_repo")
+    _validate_azure_devops_remote(remote_url)
     dirty = bool(_run_git(root, "status", "--short"))
     label = (body.label or root.name).strip() or root.name
     now = _now_iso()
@@ -202,11 +257,12 @@ def _prepare_workspace_run_sync(workspace: dict[str, Any], thread_id: str) -> di
         source = root
 
     remote_url = _run_git(source, "remote", "get-url", "origin")
-    if not _is_azure_devops_remote(remote_url):
-        raise HTTPException(422, "workspace_path_not_azure_repo")
+    _validate_azure_devops_remote(remote_url)
 
     base_branch = _run_git(source, "branch", "--show-current") or "HEAD"
     source_dirty = bool(_run_git(source, "status", "--short"))
+    if source_dirty and not _allow_dirty_workspace():
+        raise HTTPException(409, "workspace_source_dirty")
     branch = _worktree_branch(thread_id)
     worktree = _worktree_path(str(workspace["id"]), thread_id)
     _run_worktree_add(source, worktree, branch)

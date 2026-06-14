@@ -9,7 +9,10 @@ import os
 
 import pytest
 
-from agent.composition.sandbox_resolution import _consultative_scratch_dir
+from agent.composition.sandbox_resolution import (
+    _bind_local_worktree_sandbox,
+    _consultative_scratch_dir,
+)
 
 
 def test_consultative_scratch_dir_is_isolated_empty_and_not_cwd(
@@ -33,3 +36,15 @@ def test_consultative_scratch_dir_sanitizes_thread_id(
     assert os.path.commonpath([os.path.abspath(path), os.path.abspath(tmp_path)]) == os.path.abspath(
         tmp_path
     )
+
+
+async def test_workspace_requires_worktree_compatible_sandbox(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FakeBackend:
+        id = "fake"
+
+    monkeypatch.setenv("SANDBOX_TYPE", "langsmith")
+
+    with pytest.raises(RuntimeError, match="workspace_requires_worktree_sandbox"):
+        await _bind_local_worktree_sandbox("thread-1", FakeBackend(), str(tmp_path))

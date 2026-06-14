@@ -164,6 +164,11 @@ async def _bind_local_worktree_sandbox(
     sandbox_type = os.getenv("SANDBOX_TYPE", "langsmith")
     factory = _WORKTREE_SANDBOX_FACTORIES.get(sandbox_type)
     if factory is None:
+        if workspace_path:
+            raise RuntimeError(
+                "workspace_requires_worktree_sandbox: selected local workspaces require "
+                "SANDBOX_TYPE=local, local_worktree, or devcontainer_worktree"
+            )
         return sandbox_backend
 
     # _consultative_scratch_dir does blocking filesystem I/O (os.makedirs); run it
