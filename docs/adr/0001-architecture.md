@@ -24,16 +24,18 @@ reescrituras y sin que se filtren responsabilidades entre capas.
    Azure, Entra, Android ni MCPs concretos. (Garantizado por
    `tests/test_engine_neutrality.py`.)
 5. **model-gateway** — única fuente de verdad de modelos y capacidades.
-6. **mcp-runtime** (`packages/mcp-toolset`) — gobierna tools: registro, validación,
-   inyección de credenciales por-actor, allow/deny, provenance/audit, dispatch.
-7. **MCP servers** — las "manos": ADO, Android Knowledge, Business Knowledge,
-   Mobile QA Runner. Aislados.
+6. **capability-gateway** (`packages/mcp-toolset`) — gobierna tools: registro de
+   capabilities, validación, inyección de credenciales por-actor, allow/deny,
+   provenance/audit y dispatch. MCP es un adapter del gateway, no la abstracción raíz.
+7. **MCP/REST/SDK servers** — las "manos": ADO, Android Knowledge, Business
+   Knowledge, Mobile QA Runner. Aislados cuando ejecuten fuera del proceso.
 8. **domain-packs** — especialización por equipo (mobile-pack; futuro dotnet-pack):
    manifiesto versionado de MCPs requeridos, skills, policies, evidencia, evals,
    defaults.
 
-**MCP vs Skill:** MCP = capacidad / fuente viva de contexto ("qué puede hacer o
-consultar"). Skill = procedimiento experto = **contrato estable** (objetivo,
+**Capability vs Skill:** Capability = capacidad / fuente viva de contexto ("qué
+puede hacer o consultar"), implementable vía MCP, REST, SDK u otro adapter. Skill
+= procedimiento experto = **contrato estable** (objetivo,
 triggers, pasos mínimos, evidencia requerida, tools permitidas, criterios de éxito,
 antipatrón) + conocimiento **dinámico** vía Knowledge MCP/RAG (no markdown gigante).
 
@@ -63,10 +65,11 @@ IP, solo el API autenticado.
 - Nota: el `docker-compose` (cómo el **dev** corre el producto) es distinto del
   **devcontainer** (sandbox donde el **agente** ejecuta código del repo).
 
-### D3 — MCP aislados + credenciales por-actor
-Los MCP corren fuera del engine (subprocess/remoto). Las credenciales (PAT/bearer)
-se **mintean por-actor server-side** y **nunca** llegan al LLM ni al workspace; el
-engine solo recibe tools resueltas. Patrón de referencia ya existente:
+### D3 — Capability Gateway + credenciales por-actor
+Las capabilities corren fuera del engine y pueden estar respaldadas por MCP, REST,
+SDK u otro adapter. Las credenciales (PAT/bearer) se **mintean por-actor
+server-side** y **nunca** llegan al LLM ni al workspace; el engine solo recibe
+tools resueltas. Patrón de referencia ya existente:
 `load_azure_devops_tools_for_actor` + `get_azure_devops_access_token` (Entra→ADO).
 - **Por qué:** es el constraint de seguridad #1 del proyecto (tokens nunca expuestos).
 
@@ -101,10 +104,8 @@ reutilizable por packs futuros. Contenido: contrato estable, backing curado→RA
   límites sin duplicar config.
 - La composición (`agent/server.py`) debe adelgazarse: hoy mezcla composición +
   runtime + policy de producto.
-- **Deuda registrada:** 2 fugas pre-existentes en engine-core toleradas con allowlist
-  en `tests/test_engine_neutrality.py` (`sanitize_thinking_blocks`→`langchain_anthropic`,
-  probablemente muerto bajo el gateway; `tool_error_handler`→`agent.server`, dependencia
-  invertida) — a remover.
+- La neutralidad del engine queda protegida por `tests/test_engine_neutrality.py`
+  con `KNOWN_LEAKS = {}`.
 
 ## Diferido (cuando/si va a web)
 Separación física control/agentic, audit spine único de compliance, maquinaria
@@ -114,7 +115,7 @@ ahora.
 ## Reparto de trabajo (dos agentes)
 - **Carril A — Engine & Models:** gateway (D4), neutralidad del engine, adelgazar
   composición, docker-compose, resolución de scope.
-- **Carril B — Tools & Domain:** mcp-runtime (D3), domain-pack + mobile-pack,
-  Business/Android Knowledge MCP (D5), cablear ADO por el runtime.
+- **Carril B — Tools & Domain:** capability-gateway (D3), domain-pack + mobile-pack,
+  Business/Android Knowledge MCP (D5), cablear ADO por el gateway.
 - **Seam:** `load_tools_for(actor_id, *, domain_pack, project_scope) -> list[BaseTool]`
   (B implementa; A lo cablea en `get_agent`). B no edita `agent/server.py`.

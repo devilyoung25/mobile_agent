@@ -1,18 +1,18 @@
-"""Seam contract between agent-composition and the MCP runtime.
+"""Seam contract between agent-composition and the Capability Gateway.
 
 This is the agreed boundary for the two-lane split (see
 ``docs/adr/0001-architecture.md``). Composition (lane A) resolves the actor and
-their ``project_scope`` and then asks the MCP runtime (lane B) for the resolved
-tools; composition wires the call in ``get_agent``. The runtime implementation
-lives in this package and must satisfy :class:`ToolLoader`.
+their ``project_scope`` and then asks the Capability Gateway (lane B) for the
+resolved tools; composition wires the call in ``get_agent``. The gateway
+implementation lives in this package and must satisfy :class:`ToolLoader`.
 
-The runtime (lane B) owns, behind this seam:
+The gateway (lane B) owns, behind this seam:
 
-- resolving which MCP servers the ``domain_pack`` requires;
+- resolving which capabilities the ``domain_pack`` requires;
 - minting per-actor credentials **server-side** — credentials never reach the LLM
   or the workspace; the neutral engine only ever sees resolved tools;
 - applying allow/deny policy and emitting provenance/audit events;
-- dispatching to the (isolated) MCP servers.
+- dispatching to the backing adapters (MCP, REST, SDK, etc.).
 
 ``project_scope`` is the list of Azure DevOps project names the actor can access
 (produced by ``agent.integrations.azure_devops_mcp.resolve_actor_scope``).
@@ -30,7 +30,7 @@ from langchain_core.tools import BaseTool
 
 @runtime_checkable
 class ToolLoader(Protocol):
-    """Callable contract the MCP runtime must satisfy.
+    """Callable contract the Capability Gateway must satisfy.
 
     Implemented by lane B in this package; consumed by composition (lane A) in
     ``get_agent``, replacing the current direct ``load_azure_devops_tools_for_actor``

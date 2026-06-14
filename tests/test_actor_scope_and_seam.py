@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 from agent.integrations.azure_devops_mcp import resolve_actor_scope
-from mcp_toolset import ToolLoader
+from mcp_toolset import ToolLoader, load_tools_for
 
 
 class _FakeResponse:
@@ -101,4 +101,5 @@ def test_tool_loader_protocol_accepts_conforming_callable() -> None:
         return []
 
     assert isinstance(loader, ToolLoader)
+    assert isinstance(load_tools_for, ToolLoader)
     assert not isinstance(object(), ToolLoader)

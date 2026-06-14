@@ -32,7 +32,14 @@ class McpToolsetProvider:
     async def load_tools(self) -> list[Any]:
         """Connect, list tools, and apply the policy. Failures degrade to []."""
         try:
-            tools = await self._build_tools()
+            tools = await asyncio.wait_for(self._build_tools(), timeout=self.timeout_seconds)
+        except TimeoutError:
+            logger.warning(
+                "Timed out loading MCP tools for %s after %.1fs",
+                self.name,
+                self.timeout_seconds,
+            )
+            return []
         except Exception:  # noqa: BLE001
             logger.warning("Failed to load MCP tools for %s", self.name, exc_info=True)
             return []
