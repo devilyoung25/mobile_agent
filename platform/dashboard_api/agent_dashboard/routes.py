@@ -84,7 +84,12 @@ from .team_settings import (
 from .thread_api import (
     ThreadMessageBody,
     cancel_dashboard_thread,
+    clear_dashboard_queued_messages,
+    continue_dashboard_queued_messages,
+    delete_dashboard_queued_message,
     delete_dashboard_thread,
+    direct_dashboard_queued_message,
+    get_dashboard_queued_messages,
     get_dashboard_thread,
     get_dashboard_thread_state,
     list_dashboard_threads,
@@ -92,8 +97,15 @@ from .thread_api import (
     proxy_dashboard_thread_history,
     proxy_dashboard_thread_run_cancel,
     proxy_dashboard_thread_stream_events,
+    resume_dashboard_interrupt,
     send_dashboard_message,
     stream_dashboard_thread,
+)
+from .workspaces import (
+    WorkspaceCreate,
+    list_workspaces,
+    pick_and_register_workspace,
+    register_workspace,
 )
 
 logger = logging.getLogger(__name__)
@@ -497,6 +509,28 @@ async def api_azure_usage(
     return await get_project_usage(session["sub"], project, period=normalized_period)
 
 
+@router.get("/workspaces")
+async def api_list_workspaces(
+    session: dict[str, Any] = _SESSION_DEP,
+) -> dict[str, Any]:
+    return {"workspaces": await list_workspaces(session["sub"])}
+
+
+@router.post("/workspaces")
+async def api_register_workspace(
+    body: WorkspaceCreate,
+    session: dict[str, Any] = _SESSION_DEP,
+) -> dict[str, Any]:
+    return await register_workspace(session["sub"], body)
+
+
+@router.post("/workspaces/pick")
+async def api_pick_workspace(
+    session: dict[str, Any] = _SESSION_DEP,
+) -> dict[str, Any]:
+    return await pick_and_register_workspace(session["sub"])
+
+
 @router.get("/threads")
 async def api_list_threads(
     all: bool = False,
@@ -526,6 +560,83 @@ async def api_send_thread_message(
     session: dict[str, Any] = _SESSION_DEP,
 ) -> dict[str, Any]:
     return await send_dashboard_message(thread_id, session["sub"], body, email=session.get("email"))
+
+
+@router.get("/threads/{thread_id}/queued")
+async def api_get_thread_queued_messages(
+    thread_id: str,
+    session: dict[str, Any] = _SESSION_DEP,
+) -> dict[str, Any]:
+    return await get_dashboard_queued_messages(thread_id, session["sub"], email=session.get("email"))
+
+
+@router.delete("/threads/{thread_id}/queued")
+async def api_clear_thread_queued_messages(
+    thread_id: str,
+    session: dict[str, Any] = _SESSION_DEP,
+) -> dict[str, Any]:
+    return await clear_dashboard_queued_messages(thread_id, session["sub"], email=session.get("email"))
+
+
+@router.delete("/threads/{thread_id}/queued/{message_id}")
+async def api_delete_thread_queued_message(
+    thread_id: str,
+    message_id: str,
+    session: dict[str, Any] = _SESSION_DEP,
+) -> dict[str, Any]:
+    return await delete_dashboard_queued_message(
+        thread_id,
+        message_id,
+        session["sub"],
+        email=session.get("email"),
+    )
+
+
+@router.post("/threads/{thread_id}/queued/{message_id}/direct")
+async def api_direct_thread_queued_message(
+    thread_id: str,
+    message_id: str,
+    session: dict[str, Any] = _SESSION_DEP,
+) -> dict[str, Any]:
+    return await direct_dashboard_queued_message(
+        thread_id,
+        message_id,
+        session["sub"],
+        email=session.get("email"),
+        auth_provider=session.get("auth_provider") or "entra",
+        actor_id=session.get("actor_id") or session["sub"],
+    )
+
+
+@router.post("/threads/{thread_id}/queued/continue")
+async def api_continue_thread_queued_messages(
+    thread_id: str,
+    session: dict[str, Any] = _SESSION_DEP,
+) -> dict[str, Any]:
+    return await continue_dashboard_queued_messages(
+        thread_id,
+        session["sub"],
+        email=session.get("email"),
+        auth_provider=session.get("auth_provider") or "entra",
+        actor_id=session.get("actor_id") or session["sub"],
+    )
+
+
+@router.post("/threads/{thread_id}/resume")
+async def api_resume_thread_interrupt(
+    thread_id: str,
+    body: dict[str, Any],
+    session: dict[str, Any] = _SESSION_DEP,
+) -> dict[str, Any]:
+    decisions = body.get("decisions") if isinstance(body, dict) else None
+    if not isinstance(decisions, list) or not decisions:
+        raise HTTPException(status_code=400, detail="decisions_required")
+    return await resume_dashboard_interrupt(
+        thread_id,
+        decisions,
+        session["sub"],
+        email=session.get("email"),
+    )
 
 
 @router.post("/threads/{thread_id}/runs/{run_id}/cancel")

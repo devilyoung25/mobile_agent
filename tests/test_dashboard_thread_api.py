@@ -1,10 +1,10 @@
 import base64
 
 import pytest
+from agent.dashboard.options import model_supports_images
 from fastapi import HTTPException
 
 from agent.dashboard import thread_api
-from agent.dashboard.options import model_supports_images
 
 _TEXT_ONLY_MODEL = "fireworks:accounts/fireworks/models/deepseek-v4-pro"
 _VISION_MODEL = "openai:gpt-5.5"
@@ -489,3 +489,307 @@ async def test_send_dashboard_message_returns_502_when_activity_unknown(monkeypa
         )
 
     assert exc_info.value.status_code == 502
+
+
+class _QueuedThreads:
+    def __init__(self, *, status: str = "idle") -> None:
+        self.status = status
+        self.metadata: dict[str, object] = {
+            "source": "dashboard",
+            "owner_id": "octocat",
+        }
+        self.updates: list[dict[str, object]] = []
+
+    async def get(self, thread_id: str) -> dict[str, object]:
+        assert thread_id == "tid"
+        return {"thread_id": "tid", "status": self.status, "metadata": self.metadata}
+
+    async def update(self, *, thread_id: str, metadata: dict[str, object]) -> None:
+        assert thread_id == "tid"
+        self.updates.append(metadata)
+        self.metadata.update(metadata)
+
+
+class _QueuedRuns:
+    def __init__(self) -> None:
+        self.created: list[dict[str, object]] = []
+
+    async def create(self, *args: object, **kwargs: object) -> dict[str, str]:
+        self.created.append({"args": args, "kwargs": kwargs})
+        return {"run_id": "run-queued"}
+
+
+class _QueuedClient:
+    def __init__(self, *, status: str = "idle") -> None:
+        self.threads = _QueuedThreads(status=status)
+        self.runs = _QueuedRuns()
+
+
+async def test_get_dashboard_queued_messages_returns_public_payload(monkeypatch) -> None:
+    client = _QueuedClient()
+
+    async def fake_get_queued(thread_id: str) -> list[dict[str, object]]:
+        assert thread_id == "tid"
+        return [
+            {
+                "id": "m1",
+                "content": {"text": "continúa", "images": [{"type": "image"}], "secret": "x"},
+            },
+            {"id": "m2", "content": [{"type": "text", "text": "segundo"}, {"type": "image_url"}]},
+        ]
+
+    monkeypatch.setattr(thread_api, "langgraph_client", lambda: client)
+    monkeypatch.setattr(thread_api, "get_queued_messages_for_thread", fake_get_queued)
+
+    payload = await thread_api.get_dashboard_queued_messages("tid", "octocat")
+
+    assert payload == {
+        "count": 2,
+        "messages": [
+            {"id": "m1", "text": "continúa", "image_count": 1, "has_images": True},
+            {"id": "m2", "text": "segundo", "image_count": 1, "has_images": True},
+        ],
+    }
+
+
+async def test_clear_dashboard_queued_messages_drains_queue(monkeypatch) -> None:
+    client = _QueuedClient()
+    drained: list[str] = []
+
+    async def fake_drain(thread_id: str) -> list[dict[str, object]]:
+        drained.append(thread_id)
+        return [{"content": "ignored"}]
+
+    monkeypatch.setattr(thread_api, "langgraph_client", lambda: client)
+    monkeypatch.setattr(thread_api, "drain_queued_messages_for_thread", fake_drain)
+
+    payload = await thread_api.clear_dashboard_queued_messages("tid", "octocat")
+
+    assert drained == ["tid"]
+    assert payload == {"count": 0, "messages": []}
+
+
+async def test_delete_dashboard_queued_message_deletes_one(monkeypatch) -> None:
+    client = _QueuedClient()
+    deleted: list[tuple[str, str]] = []
+
+    async def fake_delete(thread_id: str, message_id: str) -> bool:
+        deleted.append((thread_id, message_id))
+        return True
+
+    async def fake_get_queued(thread_id: str) -> list[dict[str, object]]:
+        assert thread_id == "tid"
+        return [{"id": "m2", "content": "queda"}]
+
+    monkeypatch.setattr(thread_api, "langgraph_client", lambda: client)
+    monkeypatch.setattr(thread_api, "delete_queued_message_for_thread", fake_delete)
+    monkeypatch.setattr(thread_api, "get_queued_messages_for_thread", fake_get_queued)
+
+    payload = await thread_api.delete_dashboard_queued_message("tid", "m1", "octocat")
+
+    assert deleted == [("tid", "m1")]
+    assert payload == {
+        "count": 1,
+        "messages": [{"id": "m2", "text": "queda", "image_count": 0, "has_images": False}],
+    }
+
+
+async def test_direct_dashboard_queued_message_marks_one_message_for_busy_thread(
+    monkeypatch,
+) -> None:
+    client = _QueuedClient(status="busy")
+    forced: list[tuple[str, str]] = []
+
+    async def fake_force(thread_id: str, message_id: str) -> bool:
+        forced.append((thread_id, message_id))
+        return True
+
+    async def fake_get_queued(thread_id: str) -> list[dict[str, object]]:
+        assert thread_id == "tid"
+        return [
+            {"id": "m1", "content": "dirige esto", "force_for_active_run": True},
+            {"id": "m2", "content": "queda en cola"},
+        ]
+
+    monkeypatch.setattr(thread_api, "langgraph_client", lambda: client)
+    monkeypatch.setattr(thread_api, "force_queued_message_for_thread", fake_force)
+    monkeypatch.setattr(thread_api, "get_queued_messages_for_thread", fake_get_queued)
+
+    payload = await thread_api.direct_dashboard_queued_message("tid", "m1", "octocat")
+
+    assert forced == [("tid", "m1")]
+    assert payload == {
+        "status": "directed",
+        "run_id": None,
+        "queued": {
+            "count": 2,
+            "messages": [
+                {"id": "m1", "text": "dirige esto", "image_count": 0, "has_images": False},
+                {"id": "m2", "text": "queda en cola", "image_count": 0, "has_images": False},
+            ],
+        },
+    }
+    assert client.runs.created == []
+
+
+async def test_continue_dashboard_queued_messages_directs_busy_thread_queue(monkeypatch) -> None:
+    client = _QueuedClient(status="busy")
+    forced: list[str] = []
+
+    async def fail_drain(thread_id: str) -> list[dict[str, object]]:
+        raise AssertionError("busy threads must not drain the queue")
+
+    async def fake_get_queued(thread_id: str) -> list[dict[str, object]]:
+        assert thread_id == "tid"
+        return [{"content": "dirige esto"}]
+
+    async def fake_force(thread_id: str) -> bool:
+        forced.append(thread_id)
+        return True
+
+    monkeypatch.setattr(thread_api, "langgraph_client", lambda: client)
+    monkeypatch.setattr(thread_api, "get_queued_messages_for_thread", fake_get_queued)
+    monkeypatch.setattr(thread_api, "force_queued_messages_for_thread", fake_force)
+    monkeypatch.setattr(thread_api, "drain_queued_messages_for_thread", fail_drain)
+
+    payload = await thread_api.continue_dashboard_queued_messages("tid", "octocat")
+
+    assert forced == ["tid"]
+    assert payload == {
+        "status": "directed",
+        "run_id": None,
+        "queued": {
+            "count": 1,
+            "messages": [
+                {"id": "queued-0", "text": "dirige esto", "image_count": 0, "has_images": False}
+            ],
+        },
+    }
+    assert client.runs.created == []
+
+
+async def test_continue_dashboard_queued_messages_noops_without_queue(monkeypatch) -> None:
+    client = _QueuedClient()
+
+    async def fake_drain(thread_id: str) -> list[dict[str, object]]:
+        assert thread_id == "tid"
+        return []
+
+    monkeypatch.setattr(thread_api, "langgraph_client", lambda: client)
+    monkeypatch.setattr(thread_api, "drain_queued_messages_for_thread", fake_drain)
+
+    payload = await thread_api.continue_dashboard_queued_messages("tid", "octocat")
+
+    assert payload == {
+        "status": "empty",
+        "run_id": None,
+        "queued": {"count": 0, "messages": []},
+    }
+    assert client.runs.created == []
+
+
+async def test_continue_dashboard_queued_messages_starts_followup_run(monkeypatch) -> None:
+    client = _QueuedClient()
+    client.threads.metadata["latest_run_status"] = "running"
+
+    async def fake_drain(thread_id: str) -> list[dict[str, object]]:
+        assert thread_id == "tid"
+        return [{"content": "primero"}, {"content": {"text": "segundo"}}]
+
+    async def fake_profile(login: str) -> dict[str, object]:
+        assert login == "octocat"
+        return {}
+
+    async def fake_resolve_email(login: str, profile: dict[str, object]) -> str:
+        assert login == "octocat"
+        return "octocat@example.com"
+
+    monkeypatch.setattr(thread_api, "langgraph_client", lambda: client)
+    monkeypatch.setattr(thread_api, "drain_queued_messages_for_thread", fake_drain)
+    monkeypatch.setattr(thread_api, "get_profile", fake_profile)
+    monkeypatch.setattr(thread_api, "_resolve_run_email", fake_resolve_email)
+
+    payload = await thread_api.continue_dashboard_queued_messages("tid", "octocat")
+
+    assert payload["status"] == "started"
+    assert payload["run_id"] == "run-queued"
+    assert len(client.runs.created) == 1
+    created = client.runs.created[0]
+    assert created["args"] == ("tid", "agent")
+    assert created["kwargs"]["stream_mode"] == ["values", "updates", "messages-tuple"]
+    assert created["kwargs"]["input"] == {
+        "messages": [
+            {"role": "user", "content": [{"type": "text", "text": "primero"}]},
+            {"role": "user", "content": [{"type": "text", "text": "segundo"}]},
+        ]
+    }
+    assert client.threads.updates[-1]["latest_run_id"] == "run-queued"
+    assert client.threads.updates[-1]["latest_run_status"] == "pending"
+
+
+class _ResumeThreads:
+    def __init__(self, owner_metadata: dict[str, object]) -> None:
+        self._metadata = owner_metadata
+
+    async def get(self, thread_id: str) -> dict[str, object]:
+        return {"thread_id": thread_id, "metadata": self._metadata}
+
+
+class _ResumeRuns:
+    def __init__(self) -> None:
+        self.created: list[dict[str, object]] = []
+
+    async def create(self, *args: object, **kwargs: object) -> dict[str, object]:
+        self.created.append({"args": args, "kwargs": kwargs})
+        return {"run_id": "resume-run"}
+
+
+class _ResumeClient:
+    def __init__(self, owner_metadata: dict[str, object]) -> None:
+        self.threads = _ResumeThreads(owner_metadata)
+        self.runs = _ResumeRuns()
+
+
+async def test_resume_dashboard_interrupt_by_non_owner_is_rejected(monkeypatch) -> None:
+    # Approving/rejecting an interrupt is a privileged decision on the approval
+    # gate: a non-owner must get a 404 and the resume run must never be created.
+    client = _ResumeClient({"source": "dashboard", "owner_id": "owner"})
+    monkeypatch.setattr(thread_api, "langgraph_client", lambda: client)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await thread_api.resume_dashboard_interrupt(
+            "tid", [{"type": "approve"}], "intruder"
+        )
+
+    assert exc_info.value.status_code == 404
+    assert client.runs.created == []
+
+
+async def test_resume_dashboard_interrupt_owner_creates_resume_run(monkeypatch) -> None:
+    client = _ResumeClient({"source": "dashboard", "owner_id": "owner"})
+    monkeypatch.setattr(thread_api, "langgraph_client", lambda: client)
+
+    result = await thread_api.resume_dashboard_interrupt(
+        "tid", [{"type": "approve"}], "owner"
+    )
+
+    assert result == {"run_id": "resume-run"}
+    assert len(client.runs.created) == 1
+    created = client.runs.created[0]
+    assert created["args"][0] == "tid"
+    assert created["kwargs"]["command"] == {"resume": {"decisions": [{"type": "approve"}]}}
+
+
+async def test_resume_dashboard_interrupt_matches_owner_by_email(monkeypatch) -> None:
+    # Owner may be identified by email even when the login differs (e.g. Entra).
+    client = _ResumeClient(
+        {"source": "dashboard", "triggering_user_email": "owner@example.com"}
+    )
+    monkeypatch.setattr(thread_api, "langgraph_client", lambda: client)
+
+    result = await thread_api.resume_dashboard_interrupt(
+        "tid", [{"type": "reject"}], "someone-else", email="owner@example.com"
+    )
+
+    assert result == {"run_id": "resume-run"}
+    assert len(client.runs.created) == 1

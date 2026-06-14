@@ -18,9 +18,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agent.utils.langsmith import get_langsmith_trace_url
 from agent.utils.thread_ops import (
+    delete_queued_message_for_thread,
+    drain_queued_messages_for_thread,
+    force_queued_message_for_thread,
+    force_queued_messages_for_thread,
+    get_queued_messages_for_thread,
     get_thread_active_status,
     langgraph_client,
     langgraph_url,
+    pop_queued_message_for_thread,
     queue_message_for_thread,
 )
 
@@ -28,6 +34,7 @@ from .agent_overrides import normalize_profile_overrides
 from .options import is_supported_model, model_supports_effort, model_supports_images
 from .profiles import get_profile
 from .team_settings import get_team_default_model
+from .workspaces import prepare_workspace_run
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +115,56 @@ class ThreadMessageBody(BaseModel):
     images: list[DashboardImageBody] = Field(default_factory=list)
     model_id: str | None = None
     effort: str | None = None
+
+
+def _queued_content_blocks(content: Any) -> list[dict[str, Any]]:
+    if isinstance(content, str):
+        return [{"type": "text", "text": content}] if content else []
+    if isinstance(content, list):
+        return [block for block in content if isinstance(block, dict)]
+    if isinstance(content, dict):
+        blocks: list[dict[str, Any]] = []
+        text = content.get("text")
+        if isinstance(text, str) and text:
+            blocks.append({"type": "text", "text": text})
+        images = content.get("images")
+        if isinstance(images, list):
+            blocks.extend(image for image in images if isinstance(image, dict))
+        return blocks
+    return []
+
+
+def _queued_public_message(message: dict[str, Any], index: int) -> dict[str, Any]:
+    content = message.get("content")
+    text = ""
+    image_count = 0
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, dict):
+        raw_text = content.get("text")
+        text = raw_text if isinstance(raw_text, str) else ""
+        images = content.get("images")
+        image_count = len([image for image in images if isinstance(image, dict)]) if isinstance(images, list) else 0
+    elif isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str):
+                text = block["text"]
+            elif isinstance(block, dict):
+                image_count += 1
+    message_id = message.get("id")
+    return {
+        "id": message_id if isinstance(message_id, str) and message_id else f"queued-{index}",
+        "text": text,
+        "image_count": image_count,
+        "has_images": image_count > 0,
+    }
+
+
+def _queued_public_payload(messages: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "count": len(messages),
+        "messages": [_queued_public_message(message, index) for index, message in enumerate(messages)],
+    }
 
 
 def _normalize_model_choice(
@@ -320,6 +377,12 @@ def _thread_summary(
         "updatedAt": int(updated_at) if isinstance(updated_at, (int, float)) else _now_ms(),
         "traceUrl": trace_url,
     }
+    if isinstance(metadata.get("workspace_id"), str):
+        summary["workspaceId"] = metadata["workspace_id"]
+    if isinstance(metadata.get("workspace_label"), str):
+        summary["workspaceLabel"] = metadata["workspace_label"]
+    if isinstance(metadata.get("workspace_branch"), str):
+        summary["workspaceBranch"] = metadata["workspace_branch"]
     if isinstance(pr_number, int) and isinstance(pr_url, str):
         summary["pr"] = {
             "number": pr_number,
@@ -365,6 +428,33 @@ async def _latest_run_info(client: Any, thread_id: str) -> tuple[str | None, str
 async def _latest_run_status(thread_id: str) -> str | None:
     status, _ = await _latest_run_info(langgraph_client(), thread_id)
     return status
+
+
+async def resume_dashboard_interrupt(
+    thread_id: str, decisions: list[dict[str, Any]], login: str, *, email: str | None = None
+) -> dict[str, Any]:
+    """Resume a human-approval interrupt by creating a run with a Command(resume).
+
+    The dashboard's stateless command/SSE transport can't validate a tool
+    interrupt for the SDK ``respond()`` path ("already-consumed"). Creating a run
+    with the resume command server-side (the SDK equivalent of ``POST /runs`` with
+    ``command``) resumes the interrupted graph from its checkpoint and the new run
+    streams back through the thread's existing stream.
+
+    The caller's ``login``/``email`` are validated against the thread owner before
+    resuming: approving or rejecting an interrupt is a privileged decision on an
+    approval gate, so a non-owner must not be able to resume another user's run
+    (raises 404 for unknown or non-owned threads, matching the other endpoints).
+    """
+    await _authorized_thread(thread_id, login, email=email)
+    client = langgraph_client()
+    run = await client.runs.create(
+        thread_id,
+        assistant_id="agent",
+        command={"resume": {"decisions": decisions}},
+    )
+    run_id = run.get("run_id") if isinstance(run, dict) else getattr(run, "run_id", None)
+    return {"run_id": str(run_id) if run_id else None}
 
 
 async def _refresh_latest_run_metadata(
@@ -513,6 +603,7 @@ async def _create_dashboard_thread_record(
     title: str | None = None,
     model_id: str | None = None,
     effort: str | None = None,
+    workspace_id: str | None = None,
 ) -> dict[str, Any]:
     """Create or update dashboard thread metadata without starting a run."""
     profile = await get_profile(login) or {}
@@ -545,6 +636,24 @@ async def _create_dashboard_thread_record(
         metadata["repo_name"] = repo_config["name"]
     elif repo_explicitly_none:
         metadata["repo_explicitly_none"] = True
+    workspace = await prepare_workspace_run(login, workspace_id, thread_id)
+    if workspace:
+        metadata["workspace_id"] = workspace.get("id")
+        metadata["workspace_label"] = workspace.get("label")
+        metadata["workspace_path"] = workspace.get("path")
+        metadata["workspace_branch"] = workspace.get("current_branch")
+        metadata["workspace_source_path"] = workspace.get("source_path")
+        metadata["workspace_source_branch"] = workspace.get("source_branch")
+        metadata["workspace_source_is_dirty"] = workspace.get("source_is_dirty")
+        metadata["workspace_worktree_path"] = workspace.get("worktree_path")
+        metadata["workspace_worktree_branch"] = workspace.get("worktree_branch")
+        metadata["workspace_worktree_base_branch"] = workspace.get("worktree_base_branch")
+        metadata["workspace_remote_url"] = workspace.get("remote_url")
+        metadata["workspace_is_dirty"] = workspace.get("is_dirty")
+        if workspace.get("azure_project"):
+            metadata["azure_project"] = workspace.get("azure_project")
+        if workspace.get("azure_repo"):
+            metadata["azure_repo"] = workspace.get("azure_repo")
 
     client = langgraph_client()
     await client.threads.create(thread_id=thread_id, metadata=metadata, if_exists="do_nothing")
@@ -589,6 +698,24 @@ async def _build_dashboard_configurable(
     if isinstance(source_context, dict):
         for key, value in source_context.items():
             configurable.setdefault(key, value)
+    for key in (
+        "workspace_id",
+        "workspace_label",
+        "workspace_path",
+        "workspace_branch",
+        "workspace_source_path",
+        "workspace_source_branch",
+        "workspace_source_is_dirty",
+        "workspace_worktree_path",
+        "workspace_worktree_branch",
+        "workspace_worktree_base_branch",
+        "workspace_remote_url",
+        "workspace_is_dirty",
+        "azure_project",
+        "azure_repo",
+    ):
+        if metadata.get(key) is not None:
+            configurable[key] = metadata[key]
     if overrides:
         for key, value in overrides.items():
             if value is not None:
@@ -724,6 +851,9 @@ async def _enrich_run_start_command(
             images=_dashboard_images_from_content(content),
             model_id=client_configurable.get("agent_model_id"),
             effort=client_configurable.get("agent_effort"),
+            workspace_id=client_configurable.get("workspace_id")
+            if isinstance(client_configurable.get("workspace_id"), str)
+            else None,
         )
         metadata = thread.get("metadata") if isinstance(thread.get("metadata"), dict) else metadata
         if chosen_model and chosen_effort:
@@ -809,6 +939,189 @@ async def send_dashboard_message(
     thread = await client.threads.get(thread_id)
     return _thread_summary(
         thread if isinstance(thread, dict) else {"thread_id": thread_id, "metadata": metadata}
+    )
+
+
+async def get_dashboard_queued_messages(
+    thread_id: str, login: str, *, email: str | None = None
+) -> dict[str, Any]:
+    client = langgraph_client()
+    try:
+        thread = await client.threads.get(thread_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, "thread not found") from exc
+
+    metadata = thread.get("metadata") if isinstance(thread.get("metadata"), dict) else {}
+    _assert_thread_owner(metadata, login, email)
+    return _queued_public_payload(await get_queued_messages_for_thread(thread_id))
+
+
+async def clear_dashboard_queued_messages(
+    thread_id: str, login: str, *, email: str | None = None
+) -> dict[str, Any]:
+    client = langgraph_client()
+    try:
+        thread = await client.threads.get(thread_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, "thread not found") from exc
+
+    metadata = thread.get("metadata") if isinstance(thread.get("metadata"), dict) else {}
+    _assert_thread_owner(metadata, login, email)
+    await drain_queued_messages_for_thread(thread_id)
+    return _queued_public_payload([])
+
+
+async def delete_dashboard_queued_message(
+    thread_id: str, message_id: str, login: str, *, email: str | None = None
+) -> dict[str, Any]:
+    client = langgraph_client()
+    try:
+        thread = await client.threads.get(thread_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, "thread not found") from exc
+
+    metadata = thread.get("metadata") if isinstance(thread.get("metadata"), dict) else {}
+    _assert_thread_owner(metadata, login, email)
+    deleted = await delete_queued_message_for_thread(thread_id, message_id)
+    if not deleted:
+        raise HTTPException(404, "queued message not found")
+    return _queued_public_payload(await get_queued_messages_for_thread(thread_id))
+
+
+async def _create_queued_followup_run(
+    thread_id: str,
+    login: str,
+    metadata: dict[str, Any],
+    queued: list[dict[str, Any]],
+    *,
+    auth_provider: str,
+    actor_id: str | None,
+    email: str | None,
+) -> dict[str, Any]:
+    input_messages: list[dict[str, Any]] = []
+    for message in queued:
+        blocks = _queued_content_blocks(message.get("content"))
+        if blocks:
+            input_messages.append({"role": "user", "content": blocks})
+    if not input_messages:
+        return {"status": "empty", "run_id": None, "queued": _queued_public_payload([])}
+
+    client = langgraph_client()
+    configurable = await _build_dashboard_configurable(
+        thread_id,
+        login,
+        metadata,
+        auth_provider=auth_provider,
+        actor_id=actor_id,
+        email=email,
+    )
+    try:
+        run = await client.runs.create(
+            thread_id,
+            _ASSISTANT_ID,
+            input={"messages": input_messages},
+            config={"configurable": configurable},
+            if_not_exists="create",
+            stream_mode=["values", "updates", "messages-tuple"],
+            stream_resumable=True,
+            metadata=_agent_version_metadata(),
+        )
+    except Exception as exc:  # noqa: BLE001
+        for message in queued:
+            await queue_message_for_thread(thread_id, message.get("content", ""))
+        raise HTTPException(502, "failed to continue queued follow-up message") from exc
+    run_id = run.get("run_id") if isinstance(run, dict) else getattr(run, "run_id", None)
+    await client.threads.update(
+        thread_id=thread_id,
+        metadata={
+            "latest_run_id": run_id,
+            "latest_run_status": "pending",
+            "source": _DASHBOARD_SOURCE,
+            "updated_at_ms": _now_ms(),
+        },
+    )
+    return {"status": "started", "run_id": run_id, "queued": _queued_public_payload([])}
+
+
+async def direct_dashboard_queued_message(
+    thread_id: str,
+    message_id: str,
+    login: str,
+    *,
+    email: str | None = None,
+    auth_provider: str = "entra",
+    actor_id: str | None = None,
+) -> dict[str, Any]:
+    client = langgraph_client()
+    try:
+        thread = await client.threads.get(thread_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, "thread not found") from exc
+
+    metadata = thread.get("metadata") if isinstance(thread.get("metadata"), dict) else {}
+    _assert_thread_owner(metadata, login, email)
+    if _thread_is_busy(thread):
+        forced = await force_queued_message_for_thread(thread_id, message_id)
+        if not forced:
+            raise HTTPException(404, "queued message not found")
+        return {
+            "status": "directed",
+            "run_id": None,
+            "queued": _queued_public_payload(await get_queued_messages_for_thread(thread_id)),
+        }
+
+    message = await pop_queued_message_for_thread(thread_id, message_id)
+    if message is None:
+        raise HTTPException(404, "queued message not found")
+    return await _create_queued_followup_run(
+        thread_id,
+        login,
+        metadata,
+        [message],
+        auth_provider=auth_provider,
+        actor_id=actor_id,
+        email=email,
+    )
+
+
+async def continue_dashboard_queued_messages(
+    thread_id: str,
+    login: str,
+    *,
+    email: str | None = None,
+    auth_provider: str = "entra",
+    actor_id: str | None = None,
+) -> dict[str, Any]:
+    client = langgraph_client()
+    try:
+        thread = await client.threads.get(thread_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, "thread not found") from exc
+
+    metadata = thread.get("metadata") if isinstance(thread.get("metadata"), dict) else {}
+    _assert_thread_owner(metadata, login, email)
+    if _thread_is_busy(thread):
+        queued = await get_queued_messages_for_thread(thread_id)
+        if not queued:
+            return {"status": "empty", "run_id": None, "queued": _queued_public_payload([])}
+        forced = await force_queued_messages_for_thread(thread_id)
+        if not forced:
+            raise HTTPException(502, "failed to direct queued follow-up message")
+        return {
+            "status": "directed",
+            "run_id": None,
+            "queued": _queued_public_payload(await get_queued_messages_for_thread(thread_id)),
+        }
+
+    queued = await drain_queued_messages_for_thread(thread_id)
+    return await _create_queued_followup_run(
+        thread_id,
+        login,
+        metadata,
+        queued,
+        auth_provider=auth_provider,
+        actor_id=actor_id,
+        email=email,
     )
 
 
