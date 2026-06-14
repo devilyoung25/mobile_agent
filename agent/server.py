@@ -23,6 +23,7 @@ warnings.filterwarnings("ignore", message=".*Pydantic V1.*", category=UserWarnin
 
 from deepagents import create_deep_agent
 from deepagents.backends.protocol import SandboxBackendProtocol
+from langchain.agents.middleware.human_in_the_loop import InterruptOnConfig
 from langsmith.sandbox import SandboxClientError
 from on_core import DEFAULT_RECURSION_LIMIT, MODEL_CALL_RECURSION_LIMIT, build_engine
 
@@ -36,9 +37,14 @@ from .dashboard.agent_overrides import (
 from .dashboard.agent_usage import record_agent_thread_usage
 from .dashboard.options import is_supported_model, model_supports_effort
 from .dashboard.team_settings import get_team_default_model_pair, get_team_default_repo
-from .integrations.azure_devops_mcp import load_azure_devops_tools_for_actor
+from .integrations.azure_devops_mcp import (
+    AZURE_DEVOPS_PROMPT_FRAGMENT,
+    load_azure_devops_tools_for_actor,
+)
 from .integrations.datadog_mcp import load_datadog_tools
+from .integrations.devcontainer_worktree import create_devcontainer_worktree_sandbox
 from .integrations.langsmith_tools import load_langsmith_tools
+from .integrations.local_worktree import LocalWorktreeBackend, create_local_worktree_sandbox
 from .prompt import construct_system_prompt
 from .tools import (
     fetch_url,
@@ -158,6 +164,96 @@ async def check_or_recreate_sandbox(
             thread_id,
         )
         sandbox_backend = await _recreate_sandbox(thread_id)
+    return sandbox_backend
+
+
+def _workspace_execution_path(configurable: dict[str, Any]) -> str | None:
+    for key in ("workspace_worktree_path", "workspace_path"):
+        value = configurable.get(key)
+        if isinstance(value, str) and value.startswith("/"):
+            return value
+    return None
+
+
+def _is_local_worktree_backend(sandbox_backend: SandboxBackendProtocol) -> bool:
+    return isinstance(unwrap_sandbox_backend(sandbox_backend), LocalWorktreeBackend)
+
+
+# Worktree providers bind a per-thread workspace path as their root. "local" maps
+# to the guardrailed local worktree too (its raw backend is never used once a
+# workspace is selected).
+_WORKTREE_SANDBOX_FACTORIES = {
+    "local": create_local_worktree_sandbox,
+    "local_worktree": create_local_worktree_sandbox,
+    "devcontainer_worktree": create_devcontainer_worktree_sandbox,
+}
+
+
+def _consultative_scratch_dir(thread_id: str) -> str:
+    """An isolated, empty per-thread directory for consultative (no-workspace) runs.
+
+    Without a prepared workspace the local sandbox would otherwise root at the
+    process cwd (the ON Mobile Agent repo itself), letting a free chat read/explore
+    the wrong project. Rooting at an empty scratch dir keeps consultative runs from
+    ever seeing the host project; the consultative prompt already tells the agent
+    not to touch the filesystem.
+    """
+    root = os.environ.get("ON_MOBILE_AGENT_CONSULTATIVE_ROOT") or os.path.join(
+        os.path.expanduser("~/.on-mobile-agent"), "consultative"
+    )
+    safe = thread_id.replace("/", "-").replace("..", "-").strip("-") or "thread"
+    path = os.path.join(root, safe)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+async def _bind_local_worktree_sandbox(
+    thread_id: str,
+    sandbox_backend: SandboxBackendProtocol,
+    workspace_path: str | None,
+) -> SandboxBackendProtocol:
+    """Bind worktree-provider execution to the per-thread root.
+
+    With a prepared workspace → that worktree. Without one → an isolated empty
+    scratch dir (consultative mode), so the agent never sees the host project.
+    Remote providers (langsmith/daytona/…) are already isolated, so leave them.
+    """
+    sandbox_type = os.getenv("SANDBOX_TYPE", "langsmith")
+    factory = _WORKTREE_SANDBOX_FACTORIES.get(sandbox_type)
+    if factory is None:
+        return sandbox_backend
+
+    # _consultative_scratch_dir does blocking filesystem I/O (os.makedirs); run it
+    # off the event loop so LangGraph's blockbuster guard doesn't trip.
+    if workspace_path:
+        bind_root = workspace_path
+    else:
+        bind_root = await asyncio.to_thread(_consultative_scratch_dir, thread_id)
+
+    current = unwrap_sandbox_backend(sandbox_backend)
+    current_root = getattr(current, "root_dir", None)
+    if current_root is not None and os.path.abspath(str(current_root)) == os.path.abspath(
+        bind_root
+    ):
+        return sandbox_backend
+
+    mode = "worktree" if workspace_path else "consultative scratch"
+    logger.info(
+        "Binding %s sandbox for thread %s to %s %s",
+        sandbox_type,
+        thread_id,
+        mode,
+        bind_root,
+    )
+    worktree_backend = await asyncio.to_thread(factory, None, root_dir=bind_root)
+    sandbox_backend = set_sandbox_backend(thread_id, worktree_backend)
+    try:
+        await client.threads.update(
+            thread_id=thread_id,
+            metadata={"sandbox_id": sandbox_backend.id},
+        )
+    except Exception:
+        logger.debug("Failed to persist worktree sandbox id", exc_info=True)
     return sandbox_backend
 
 
@@ -316,6 +412,37 @@ async def _load_observability_tools(authorized: bool) -> list[Any]:
     return [*datadog_tools, *langsmith_tools]
 
 
+_MUTATING_HTTP_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _http_request_mutates(request: Any) -> bool:
+    """True when an ``http_request`` tool call would change remote state."""
+    args = request.tool_call.get("args") if hasattr(request, "tool_call") else None
+    method = str((args or {}).get("method", "GET")).upper()
+    return method in _MUTATING_HTTP_METHODS
+
+
+def _approval_policy() -> dict[str, Any]:
+    """Human-approval gate policy (brand-neutral ``interrupt_on`` for the engine).
+
+    Today the only persistent action the agent can attempt is a state-changing
+    HTTP call (Azure DevOps writes are filtered out entirely), so we gate
+    ``http_request`` on mutating methods — reads pass through untouched. When a
+    controlled Azure DevOps write tool is enabled, add it to this mapping; the
+    engine's gate mechanism stays the same.
+    """
+    return {
+        "http_request": InterruptOnConfig(
+            allowed_decisions=["approve", "reject"],
+            when=_http_request_mutates,
+            description=(
+                "This sends a state-changing HTTP request (a persistent action) and "
+                "requires human approval before it runs."
+            ),
+        )
+    }
+
+
 async def get_agent(config: RunnableConfig) -> Pregel:
     """Get or create an agent with a sandbox for the given thread."""
     configurable = (config or {}).get("configurable") or {}
@@ -338,7 +465,14 @@ async def get_agent(config: RunnableConfig) -> Pregel:
     sandbox_backend, team_defaults = await asyncio.gather(sandbox_task, team_defaults_task)
     profile = await profile_task if profile_task is not None else None
 
-    work_dir = await aresolve_sandbox_work_dir(sandbox_backend)
+    workspace_path = _workspace_execution_path(configurable)
+    sandbox_backend = await _bind_local_worktree_sandbox(thread_id, sandbox_backend, workspace_path)
+    if _is_local_worktree_backend(sandbox_backend):
+        work_dir = "/"
+    else:
+        work_dir = await aresolve_sandbox_work_dir(sandbox_backend)
+        if workspace_path:
+            work_dir = workspace_path
 
     def backend_factory(_runtime: object, _thread_id: str = thread_id) -> SandboxBackendProtocol:
         return _get_cached_sandbox_backend(_thread_id)
@@ -461,7 +595,8 @@ async def get_agent(config: RunnableConfig) -> Pregel:
             triggering_user_identity=triggering_user_identity,
             default_repo=prompt_default_repo,
             repo_custom_instructions=repo_custom_instructions,
-            code_host="azure_devops",
+            mode="workspace" if workspace_path else "consultative",
+            integration_policy=AZURE_DEVOPS_PROMPT_FRAGMENT if azure_devops_tools else None,
         ),
         tools=[
             http_request,
@@ -473,4 +608,5 @@ async def get_agent(config: RunnableConfig) -> Pregel:
         backend=backend_factory,
         fallback_model=fallback_model,
         run_limit=MODEL_CALL_RECURSION_LIMIT,
+        approval_policy=_approval_policy(),
     ).with_config(config)

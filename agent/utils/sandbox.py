@@ -12,6 +12,11 @@ SANDBOX_FACTORIES: dict[str, tuple[str, str]] = {
     "modal": ("agent.integrations.modal", "create_modal_sandbox"),
     "runloop": ("agent.integrations.runloop", "create_runloop_sandbox"),
     "local": ("agent.integrations.local", "create_local_sandbox"),
+    "local_worktree": ("agent.integrations.local_worktree", "create_local_worktree_sandbox"),
+    "devcontainer_worktree": (
+        "agent.integrations.devcontainer_worktree",
+        "create_devcontainer_worktree_sandbox",
+    ),
 }
 
 
@@ -31,7 +36,7 @@ def create_sandbox(sandbox_id: str | None = None) -> SandboxBackendProtocol:
     """Create or reconnect to a sandbox using the configured provider.
 
     The provider is selected via the SANDBOX_TYPE environment variable.
-    Supported values: langsmith (default), daytona, modal, runloop, local.
+    Supported values: langsmith (default), daytona, modal, runloop, local, local_worktree.
 
     Args:
         sandbox_id: Optional existing sandbox ID to reconnect to.
@@ -56,6 +61,12 @@ def validate_sandbox_startup_config() -> None:
         from agent.integrations.langsmith import LangSmithProvider
 
         LangSmithProvider.validate_startup_config()
+    elif sandbox_type == "devcontainer_worktree":
+        from agent.integrations.devcontainer_worktree import (
+            validate_devcontainer_startup_config,
+        )
+
+        validate_devcontainer_startup_config()
 
 
 # Register this factory with the engine core so reconnects work without the

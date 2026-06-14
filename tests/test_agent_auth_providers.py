@@ -65,7 +65,9 @@ async def test_engine_run_uses_actor_identity_and_azure_devops_tools() -> None:
     load_profile.assert_awaited_once_with("entra:user-oid")
     ado_tools.assert_awaited_once_with("entra:user-oid")
     assert record_usage.await_args.kwargs["actor_id"] == "entra:user-oid"
-    assert prompt.call_args.kwargs["code_host"] == "azure_devops"
+    # Azure policy is injected into the prompt as integration policy (provider-neutral
+    # engine) whenever Azure DevOps tools are loaded — replaces the old `code_host` arg.
+    assert prompt.call_args.kwargs["integration_policy"] is not None
     loaded_tools = build_engine.call_args.kwargs["tools"]
     assert ado_tool in loaded_tools
     tool_names = {getattr(t, "__name__", getattr(t, "name", "")) for t in loaded_tools}

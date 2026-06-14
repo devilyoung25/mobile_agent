@@ -26,6 +26,27 @@ agent/                       Compatibility/runtime entrypoints during migration.
 and `agent/integrations` are compatibility shims. Do not add new product code
 there unless preserving existing imports is the smallest safe move.
 
+### Engine (upstream vs. ours)
+
+The real agent loop is `deepagents==0.6.8` (pinned, never modified).
+`build_engine` (`engine/agent-engine-core/on_core/engine.py`) is a faithful
+extraction of upstream's `create_deep_agent` call: same model/tools/subagent
+wiring, same `DEFAULT_RECURSION_LIMIT`, same middleware order.
+
+Middleware kept (brand-neutral): `SanitizeToolInputsMiddleware`,
+`ModelCallLimitMiddleware`, `ToolErrorMiddleware`, `ToolArtifactMiddleware`,
+`check_message_queue_before_model`, `ensure_no_empty_msg`,
+`SandboxCircuitBreakerMiddleware`, `ModelFallbackMiddleware` (optional),
+`SanitizeThinkingBlocksMiddleware`.
+
+Removed on purpose (host/brand coupling): `refresh_github_proxy_before_model`
+(GitHub), `SlackAssistantStatusMiddleware` and `notify_step_limit_reached`
+(Slack). `check_message_queue_before_model` was *not* brand-specific — it drains
+follow-up messages queued mid-run (Store `("queue", thread_id)/pending_messages`,
+produced by `queue_message_for_thread`) and injects them before the next model
+call; it was dropped by accident in the purge and restored, sitting between
+`ToolArtifactMiddleware` and `ensure_no_empty_msg` exactly as upstream.
+
 ## Commands
 
 Dependencies are managed with `uv`. Dashboard dependencies are managed from
