@@ -3,9 +3,9 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
-from agent import server
 from agent.dashboard.team_credentials import DatadogCredentials, LangSmithCredentials
+
+from agent.composition import tool_resolution
 from agent.integrations import datadog_mcp, langsmith_tools
 
 
@@ -102,19 +102,19 @@ async def test_langsmith_list_runs_caps_limit() -> None:
 @pytest.mark.asyncio
 async def test_load_observability_tools_skipped_when_unauthorized() -> None:
     with (
-        patch.object(server, "load_datadog_tools", AsyncMock(return_value=["dd"])),
-        patch.object(server, "load_langsmith_tools", AsyncMock(return_value=["ls"])),
+        patch.object(tool_resolution, "load_datadog_tools", AsyncMock(return_value=["dd"])),
+        patch.object(tool_resolution, "load_langsmith_tools", AsyncMock(return_value=["ls"])),
     ):
-        assert await server._load_observability_tools(authorized=False) == []
+        assert await tool_resolution._load_observability_tools(authorized=False) == []
 
 
 @pytest.mark.asyncio
 async def test_load_observability_tools_loaded_when_authorized() -> None:
     with (
-        patch.object(server, "load_datadog_tools", AsyncMock(return_value=["dd"])),
-        patch.object(server, "load_langsmith_tools", AsyncMock(return_value=["ls"])),
+        patch.object(tool_resolution, "load_datadog_tools", AsyncMock(return_value=["dd"])),
+        patch.object(tool_resolution, "load_langsmith_tools", AsyncMock(return_value=["ls"])),
     ):
-        assert await server._load_observability_tools(authorized=True) == ["dd", "ls"]
+        assert await tool_resolution._load_observability_tools(authorized=True) == ["dd", "ls"]
 
 
 @pytest.mark.asyncio
@@ -125,8 +125,8 @@ async def test_observability_authorized_gates_on_admin(monkeypatch: pytest.Monke
     admin_config = {"configurable": {"user_email": "admin@example.com"}}
     other_config = {"configurable": {"user_email": "attacker@example.com"}}
 
-    assert server._observability_authorized(admin_config) is True
-    assert server._observability_authorized(other_config) is False
+    assert tool_resolution._observability_authorized(admin_config) is True
+    assert tool_resolution._observability_authorized(other_config) is False
 
 
 @pytest.mark.asyncio
@@ -135,4 +135,4 @@ async def test_observability_authorized_allowlist(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("OBSERVABILITY_AUTHORIZED_EMAILS", "trusted@example.com")
 
     config = {"configurable": {"user_email": "trusted@example.com"}}
-    assert server._observability_authorized(config) is True
+    assert tool_resolution._observability_authorized(config) is True

@@ -23,12 +23,20 @@ warnings.filterwarnings("ignore", message=".*Pydantic V1.*", category=UserWarnin
 
 from deepagents import create_deep_agent
 from deepagents.backends.protocol import SandboxBackendProtocol
-from langchain.agents.middleware.human_in_the_loop import InterruptOnConfig
 from langsmith.sandbox import SandboxClientError
 from mcp_toolset import load_tools_for
 from on_core import DEFAULT_RECURSION_LIMIT, MODEL_CALL_RECURSION_LIMIT, build_engine
 
-from .dashboard.admin import is_observability_authorized
+from .composition.approval_resolution import _approval_policy, _has_azure_devops
+from .composition.prompt_resolution import (
+    _resolve_prompt_default_repo,
+    _resolve_repo_custom_instructions,
+)
+from .composition.tool_resolution import (
+    _domain_pack,
+    _load_observability_tools,
+    _observability_authorized,
+)
 from .dashboard.agent_overrides import (
     load_profile,
     normalize_profile_overrides,
@@ -37,14 +45,12 @@ from .dashboard.agent_overrides import (
 )
 from .dashboard.agent_usage import record_agent_thread_usage
 from .dashboard.options import is_supported_model, model_supports_effort
-from .dashboard.team_settings import get_team_default_model_pair, get_team_default_repo
+from .dashboard.team_settings import get_team_default_model_pair
 from .integrations.azure_devops_mcp import (
     AZURE_DEVOPS_PROMPT_FRAGMENT,
     resolve_actor_scope,
 )
-from .integrations.datadog_mcp import load_datadog_tools
 from .integrations.devcontainer_worktree import create_devcontainer_worktree_sandbox
-from .integrations.langsmith_tools import load_langsmith_tools
 from .integrations.local_worktree import LocalWorktreeBackend, create_local_worktree_sandbox
 from .prompt import construct_system_prompt
 from .tools import (
@@ -78,39 +84,6 @@ from .utils.sandbox_state import (
 )
 
 __all__ = ["get_agent", "ensure_sandbox_for_thread", "unwrap_sandbox_backend"]
-
-
-async def _resolve_prompt_default_repo(configurable: dict[str, Any]) -> dict[str, str] | None:
-    repo_config = configurable.get("repo")
-    if isinstance(repo_config, dict):
-        owner = repo_config.get("owner")
-        name = repo_config.get("name")
-        if isinstance(owner, str) and isinstance(name, str):
-            return {"owner": owner, "name": name}
-
-    if configurable.get("repo_explicitly_none") is True:
-        return None
-
-    try:
-        return await get_team_default_repo()
-    except Exception:
-        logger.debug("Failed to load team default repo for prompt", exc_info=True)
-        return None
-
-
-async def _resolve_repo_custom_instructions(
-    default_repo: dict[str, str] | None,
-) -> str | None:
-    """Load per-repo custom agent instructions for the resolved default repo."""
-    if not default_repo or not default_repo.get("owner") or not default_repo.get("name"):
-        return None
-    try:
-        from .dashboard.agent_instructions import get_repo_agent_instructions
-
-        return await get_repo_agent_instructions(default_repo["owner"], default_repo["name"])
-    except Exception:
-        logger.debug("Failed to load repo custom agent instructions", exc_info=True)
-        return None
 
 
 async def _configure_git_identity(sandbox_backend: SandboxBackendProtocol) -> None:
@@ -390,97 +363,6 @@ def _get_cached_sandbox_backend(thread_id: str) -> SandboxBackendProtocol:
     if sandbox_backend is None:
         raise RuntimeError(f"No sandbox backend cached for thread {thread_id}")
     return sandbox_backend
-
-
-def _observability_authorized(config: RunnableConfig) -> bool:
-    """Whether the triggering user may use the team observability tools.
-
-    Gates on admin / explicitly-authorized emails so prompt-injected runs from
-    untrusted contributors cannot reach the team's observability data.
-    """
-    configurable = (config or {}).get("configurable") or {}
-    return is_observability_authorized(configurable.get("user_email"))
-
-
-async def _load_observability_tools(authorized: bool) -> list[Any]:
-    """Datadog (MCP) + LangSmith read tools when the team has connected them.
-
-    Credentials live server-side in team settings; the sandbox never holds them.
-    Only loaded for authorized (admin / allow-listed) triggering users so an
-    untrusted run cannot exfiltrate team observability data. Failures degrade to
-    no tools so the agent still starts.
-    """
-    if not authorized:
-        return []
-    try:
-        datadog_tools, langsmith_tools = await asyncio.gather(
-            load_datadog_tools(),
-            load_langsmith_tools(),
-        )
-    except Exception:
-        logger.warning("Failed to load observability tools", exc_info=True)
-        return []
-    return [*datadog_tools, *langsmith_tools]
-
-
-_MUTATING_HTTP_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
-
-
-def _http_request_mutates(request: Any) -> bool:
-    """True when an ``http_request`` tool call would change remote state."""
-    args = request.tool_call.get("args") if hasattr(request, "tool_call") else None
-    method = str((args or {}).get("method", "GET")).upper()
-    return method in _MUTATING_HTTP_METHODS
-
-
-def _capability_meta(tool: Any) -> dict[str, Any]:
-    """Non-sensitive capability metadata attached by the Capability Gateway."""
-    meta = getattr(tool, "metadata", None)
-    cap = meta.get("capability") if isinstance(meta, dict) else None
-    return cap if isinstance(cap, dict) else {}
-
-
-def _has_azure_devops(tools: list[Any]) -> bool:
-    """True when the resolved capability tools include the Azure DevOps origin."""
-    return any("azure-devops" in _capability_meta(tool).get("provenance_tags", []) for tool in tools)
-
-
-def _approval_policy(gateway_tools: list[Any] | None = None) -> dict[str, Any]:
-    """Human-approval gate policy (brand-neutral ``interrupt_on`` for the engine).
-
-    Gates a state-changing ``http_request`` on mutating methods (reads pass
-    through), plus any Capability Gateway tool whose descriptor declared
-    ``requires_approval``. The gate mechanism lives in the neutral engine; the
-    Capability Gateway is the source of truth for *which* capabilities need it.
-    """
-    policy: dict[str, Any] = {
-        "http_request": InterruptOnConfig(
-            allowed_decisions=["approve", "reject"],
-            when=_http_request_mutates,
-            description=(
-                "This sends a state-changing HTTP request (a persistent action) and "
-                "requires human approval before it runs."
-            ),
-        )
-    }
-    for tool in gateway_tools or []:
-        if _capability_meta(tool).get("requires_approval"):
-            policy[tool.name] = InterruptOnConfig(
-                allowed_decisions=["approve", "reject"],
-                description=(
-                    f"This invokes the gated capability '{tool.name}' (a persistent "
-                    "action) and requires human approval before it runs."
-                ),
-            )
-    return policy
-
-
-def _domain_pack(configurable: dict[str, Any]) -> str:
-    """Domain pack for this run (per-run override → env → default ``mobile``)."""
-    pack = configurable.get("domain_pack")
-    if isinstance(pack, str) and pack.strip():
-        return pack.strip()
-    return os.environ.get("ON_MOBILE_AGENT_DOMAIN_PACK", "mobile")
 
 
 async def get_agent(config: RunnableConfig) -> Pregel:

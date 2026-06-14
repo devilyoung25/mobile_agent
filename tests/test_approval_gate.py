@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 from langchain.agents.middleware.human_in_the_loop import HumanInTheLoopMiddleware
 from on_core import build_engine
 
-from agent.server import _approval_policy, _http_request_mutates
+from agent.composition.approval_resolution import _approval_policy, _http_request_mutates
 
 
 def _request(method: str | None) -> MagicMock:
