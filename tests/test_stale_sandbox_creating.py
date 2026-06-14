@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent.server import (
+from agent.composition.sandbox_resolution import (
     SANDBOX_BACKENDS,
     SANDBOX_CREATING,
     SANDBOX_CREATION_TIMEOUT,
@@ -22,14 +22,14 @@ async def test_stale_sandbox_creating_without_cached_backend_resets_and_creates(
 
     with (
         patch(
-            "agent.server.get_sandbox_id_from_metadata",
+            "agent.composition.sandbox_resolution.get_sandbox_id_from_metadata",
             new_callable=AsyncMock,
             return_value=SANDBOX_CREATING,
         ),
-        patch("agent.server.client.threads.get", new_callable=AsyncMock, return_value=thread),
-        patch("agent.server._create_sandbox_backend", new_callable=AsyncMock) as create_sandbox,
-        patch("agent.server._configure_git_identity", new_callable=AsyncMock),
-        patch("agent.server.client.threads.update", new_callable=AsyncMock) as update_thread,
+        patch("agent.composition.sandbox_resolution.client.threads.get", new_callable=AsyncMock, return_value=thread),
+        patch("agent.composition.sandbox_resolution._create_sandbox_backend", new_callable=AsyncMock) as create_sandbox,
+        patch("agent.composition.sandbox_resolution._configure_git_identity", new_callable=AsyncMock),
+        patch("agent.composition.sandbox_resolution.client.threads.update", new_callable=AsyncMock) as update_thread,
     ):
         create_sandbox.return_value = sandbox_backend
 
@@ -74,17 +74,17 @@ async def test_fresh_sandbox_creating_waits_for_other_worker() -> None:
 
     with (
         patch(
-            "agent.server.get_sandbox_id_from_metadata",
+            "agent.composition.sandbox_resolution.get_sandbox_id_from_metadata",
             new_callable=AsyncMock,
             return_value=SANDBOX_CREATING,
         ),
-        patch("agent.server.client.threads.get", new_callable=AsyncMock, side_effect=threads),
-        patch("agent.server.asyncio.sleep", new_callable=AsyncMock),
-        patch("agent.server.create_sandbox", return_value=existing_backend) as connect_sandbox,
-        patch("agent.server._create_sandbox_backend", new_callable=AsyncMock) as create_sandbox,
-        patch("agent.server.check_or_recreate_sandbox", side_effect=passthrough),
-        patch("agent.server._configure_git_identity", new_callable=AsyncMock),
-        patch("agent.server.client.threads.update", new_callable=AsyncMock) as update_thread,
+        patch("agent.composition.sandbox_resolution.client.threads.get", new_callable=AsyncMock, side_effect=threads),
+        patch("agent.composition.sandbox_resolution.asyncio.sleep", new_callable=AsyncMock),
+        patch("agent.composition.sandbox_resolution.create_sandbox", return_value=existing_backend) as connect_sandbox,
+        patch("agent.composition.sandbox_resolution._create_sandbox_backend", new_callable=AsyncMock) as create_sandbox,
+        patch("agent.composition.sandbox_resolution.check_or_recreate_sandbox", side_effect=passthrough),
+        patch("agent.composition.sandbox_resolution._configure_git_identity", new_callable=AsyncMock),
+        patch("agent.composition.sandbox_resolution.client.threads.update", new_callable=AsyncMock) as update_thread,
     ):
         result = await ensure_sandbox_for_thread(thread_id)
 

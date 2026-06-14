@@ -48,15 +48,10 @@ async def test_engine_run_uses_actor_identity_and_azure_devops_tools() -> None:
 
     with (
         patch(
-            "agent.server.ensure_sandbox_for_thread",
+            "agent.server.resolve_run_sandbox",
             new_callable=AsyncMock,
-            return_value=MagicMock(),
-        ) as ensure_sandbox,
-        patch(
-            "agent.server.aresolve_sandbox_work_dir",
-            new_callable=AsyncMock,
-            return_value="/workspace",
-        ),
+            return_value=(MagicMock(), "/workspace", None, lambda *_a, **_k: MagicMock()),
+        ) as resolve_sandbox,
         patch(
             "agent.server.get_team_default_model_pair",
             new_callable=AsyncMock,
@@ -79,7 +74,7 @@ async def test_engine_run_uses_actor_identity_and_azure_devops_tools() -> None:
         fake_client.threads.update = AsyncMock()
         await get_agent(config)
 
-    ensure_sandbox.assert_awaited_once_with("thread-123")
+    resolve_sandbox.assert_awaited_once()
     load_profile.assert_awaited_once_with("entra:user-oid")
     load_tools.assert_awaited_once_with(
         "entra:user-oid", domain_pack="mobile", project_scope=["AppMovil"]

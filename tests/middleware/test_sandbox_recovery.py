@@ -48,7 +48,7 @@ def _sandbox_error_message(tool_call_id: str, sandbox_id: str = "sb-dead") -> To
 async def test_sandbox_client_error_recreates_sandbox() -> None:
     # The engine receives sandbox recreation as an injected composition callback
     # (no engine->composition import); inject the real one so this exercises it.
-    from agent.server import _recreate_sandbox_for_thread
+    from agent.composition.sandbox_resolution import _recreate_sandbox_for_thread
 
     middleware = ToolErrorMiddleware(recreate_sandbox=_recreate_sandbox_for_thread)
     request = _tool_request()
@@ -63,8 +63,8 @@ async def test_sandbox_client_error_recreates_sandbox() -> None:
 
     try:
         with (
-            patch("agent.server._recreate_sandbox", new_callable=AsyncMock) as mock_recreate,
-            patch("agent.server.client") as mock_client,
+            patch("agent.composition.sandbox_resolution._recreate_sandbox", new_callable=AsyncMock) as mock_recreate,
+            patch("agent.composition.sandbox_resolution.client") as mock_client,
         ):
             mock_recreate.return_value = backend
             mock_client.threads.update = AsyncMock()

@@ -42,14 +42,9 @@ async def test_agent_uses_profile_subagent_model_override(
     with (
         patch("agent.server.resolve_triggering_user_identity", return_value=None),
         patch(
-            "agent.server.ensure_sandbox_for_thread",
+            "agent.server.resolve_run_sandbox",
             new_callable=AsyncMock,
-            return_value=MagicMock(),
-        ),
-        patch(
-            "agent.server.aresolve_sandbox_work_dir",
-            new_callable=AsyncMock,
-            return_value="/workspace",
+            return_value=(MagicMock(), "/workspace", None, lambda *_a, **_k: MagicMock()),
         ),
         patch(
             "agent.server.get_team_default_model_pair",
@@ -112,14 +107,9 @@ async def test_agent_subagent_inherits_profile_model_override_without_explicit_p
     with (
         patch("agent.server.resolve_triggering_user_identity", return_value=None),
         patch(
-            "agent.server.ensure_sandbox_for_thread",
+            "agent.server.resolve_run_sandbox",
             new_callable=AsyncMock,
-            return_value=MagicMock(),
-        ),
-        patch(
-            "agent.server.aresolve_sandbox_work_dir",
-            new_callable=AsyncMock,
-            return_value="/workspace",
+            return_value=(MagicMock(), "/workspace", None, lambda *_a, **_k: MagicMock()),
         ),
         patch(
             "agent.server.get_team_default_model_pair",
