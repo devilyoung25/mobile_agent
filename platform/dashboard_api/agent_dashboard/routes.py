@@ -38,6 +38,7 @@ from .entra_oauth import (
     new_code_verifier,
     validate_entra_id_token,
 )
+from .model_catalog import get_model_catalog
 from .oauth import (
     COOKIE_NAME,
     SESSION_TTL_SECONDS,
@@ -291,6 +292,11 @@ async def auth_logout() -> Response:
     secure, samesite = _cookie_security()
     response.delete_cookie(COOKIE_NAME, path="/", samesite=samesite, secure=secure)
     return response
+
+
+@router.get("/model-catalog")
+async def api_model_catalog(session: dict[str, Any] = _SESSION_DEP) -> dict[str, Any]:
+    return await get_model_catalog()
 
 
 @router.get("/me")

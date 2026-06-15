@@ -282,9 +282,30 @@ export interface AgentInstructions {
   updated_at?: string;
 }
 
+export interface CatalogModel {
+  id: string;
+  provider: string;
+  label: string;
+  available: boolean;
+  max_input_tokens?: number;
+  efforts?: Array<string>;
+  default_effort?: string;
+}
+
+export interface CatalogProvider {
+  id: string;
+  label: string;
+  models: Array<CatalogModel>;
+}
+
+export interface ModelCatalog {
+  providers: Array<CatalogProvider>;
+}
+
 export const api = {
   me: () => request<SessionUser>("/me"),
   options: () => request<OptionsPayload>("/options"),
+  modelCatalog: () => request<ModelCatalog>("/model-catalog"),
   profile: () => request<Profile>("/profile"),
   saveProfile: (body: ProfileUpdate) =>
     request<Profile>("/profile", { method: "PUT", body: JSON.stringify(body) }),

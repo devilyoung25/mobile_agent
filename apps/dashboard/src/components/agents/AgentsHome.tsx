@@ -8,6 +8,7 @@ import type { CreateAgentThreadVariables } from "@/lib/agents/queries"
 import type { ModelSelection } from "@/lib/agents/provider/useModelOptions"
 import { AgentsApiError } from "@/lib/agents/api"
 import { AgentPromptBar } from "@/components/agents/AgentPromptBar"
+import { ModelCatalogPicker } from "@/components/agents/ModelCatalogPicker"
 import {
   SELECTED_WORKSPACE_STORAGE_KEY,
   WORKSPACE_SELECTION_EVENT,
@@ -250,6 +251,15 @@ export function AgentsHome() {
               )}
             </div>
           )}
+          <ModelCatalogPicker
+            selectedModelId={activeSelection?.modelId ?? null}
+            onSelect={(modelId, defaultEffort) =>
+              setSelection({
+                modelId,
+                effort: defaultEffort ?? activeSelection?.effort ?? "medium",
+              })
+            }
+          />
           <AgentPromptBar
             onSubmit={handleSubmit}
             disabled={submitting}
