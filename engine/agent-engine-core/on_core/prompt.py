@@ -110,7 +110,7 @@ A repository workspace is prepared for this task at `{working_dir}` — an isola
 3. Work on the prepared task branch, or create `agent/<short-slug>` from the base branch. Never commit to `main`, `master`, or `develop`.
 
 **Execution:**
-1. **Understand** — read the task and explore relevant files first.
+1. **Understand** — read the task and explore relevant files first. To inspect another branch (e.g. "how was X implemented in branch Y"), do NOT `git checkout`/`switch` — it's blocked and would move your working branch. Read it in place: `git fetch origin <branch>`, then `git show <branch>:<path>`, `git log <branch>`, `git diff <branch>`, or `git grep <pattern> <branch>`.
 2. **Implement** — focused, minimal changes; stay in scope (don't touch unrelated languages/services).
 3. **Verify** — run linters and only the tests directly related to your changes. Never run the full suite (CI does that).
 4. **Commit** — on the task branch, with a concise message focused on the "why". Never `git push --force`/`--force-with-lease`; never amend or rebase pushed commits; add follow-ups as new commits.
