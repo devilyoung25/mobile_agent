@@ -1,0 +1,68 @@
+# ON Mobile Agent — deployment SCAFFOLD (no validado con `docker compose up`).
+#
+# Para TESTING local con Azure DevOps + workspaces de rama local, corre el stack
+# en el HOST (langgraph dev + gateway + vite). Un backend en contenedor no ve tus
+# repos locales (workspaces) sin bind-mount, y la auth `azcli` de Azure no corre
+# en contenedor. Items abiertos antes de un `up` real:
+#   - reverse proxy para single-origin (dejar langgraph :2024 interno)
+#   - bind-mount de worktrees + auth ADO no-azcli dentro del contenedor
+#   - validar el build/serve de producción de TanStack Start
+#
+# `docker compose config` valida la estructura de este archivo.
+
+name: on-mobile-agent
+
+services:
+  model-gateway:
+    build: ./services/model-gateway
+    env_file:
+      - ./services/model-gateway/.env
+    expose:
+      - "4001"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:4001/health').status==200 else 1)"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /app
+    command: sh -c "uv sync && uv run langgraph dev --host 0.0.0.0 --port 2024 --no-browser"
+    env_file:
+      - ./.env
+    environment:
+      MODEL_GATEWAY_BASE_URL: http://model-gateway:4001/v1
+    volumes:
+      - .:/app
+      - langgraph-state:/app/.langgraph_api
+      # Local workspaces (clones del dev) para que los worktrees funcionen en contenedor:
+      # - ${HOME}/.on-mobile-agent/worktrees:/root/.on-mobile-agent/worktrees
+    ports:
+      # Scaffold: expuesto para que el SPA lo alcance; en prod -> reverse proxy e interno.
+      - "2024:2024"
+    depends_on:
+      model-gateway:
+        condition: service_healthy
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ./apps/dashboard
+      args:
+        VITE_DASHBOARD_API_BASE_URL: http://localhost:2024
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  langgraph-state:
