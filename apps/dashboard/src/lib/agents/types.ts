@@ -180,6 +180,9 @@ export interface AgentThread {
   effort?: string | null
   source?: AgentSource
   status: AgentStatus
+  // Client-side run-start failure detail (e.g. workspace prep error), surfaced
+  // in the thread view when the run never started.
+  errorMessage?: string
   viewed: boolean
   viewedAt?: number | null
   createdAt: number

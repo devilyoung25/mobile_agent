@@ -6,6 +6,7 @@ import { useNavigate } from "@tanstack/react-router"
 import type { AgentThread, ImageChunk } from "@/lib/agents/types"
 import type { CreateAgentThreadVariables } from "@/lib/agents/queries"
 import type { ModelSelection } from "@/lib/agents/provider/useModelOptions"
+import { AgentsApiError } from "@/lib/agents/api"
 import { AgentPromptBar } from "@/components/agents/AgentPromptBar"
 import {
   SELECTED_WORKSPACE_STORAGE_KEY,
@@ -15,6 +16,43 @@ import { Logo } from "@/components/agents/ported/Logo"
 import { agentThreadKeys, optimisticThread } from "@/lib/agents/queries"
 import { useModelOptions } from "@/lib/agents/provider/useModelOptions"
 import { useProfile, useRepos, useWorkspaces } from "@/lib/profile"
+import { useSession } from "@/lib/session"
+
+const WORKSPACE_NOT_AZURE_MESSAGE =
+  "Solo puedes seleccionar repositorios de Azure DevOps como workspace. Este repositorio no apunta a Azure DevOps."
+
+// Mirror of the backend Azure-host check (workspaces.py `_is_azure_devops_remote`).
+function isAzureRemote(url: string | null | undefined): boolean {
+  if (!url) return false
+  try {
+    const host = new URL(url.includes("://") ? url : `ssh://${url}`).hostname.toLowerCase()
+    return (
+      host === "dev.azure.com" ||
+      host === "ssh.dev.azure.com" ||
+      host.endsWith(".visualstudio.com")
+    )
+  } catch {
+    return /(?:^|@|\/\/)(?:ssh\.)?dev\.azure\.com|\.visualstudio\.com/i.test(url)
+  }
+}
+
+// Friendly Spanish copy for the workspace prep errors the run-start can raise.
+function workspaceRunErrorMessage(detail: string): string {
+  const labels: Record<string, string> = {
+    workspace_path_not_azure_repo: WORKSPACE_NOT_AZURE_MESSAGE,
+    workspace_path_wrong_azure_org:
+      "El repositorio pertenece a otra organización de Azure DevOps.",
+    workspace_source_dirty:
+      "Tu repositorio tiene cambios sin commitear. Haz commit o stash antes de iniciar.",
+    workspace_integration_branch_missing:
+      "No existe la rama de integración (develop) en origin. Verifica el remoto.",
+    workspace_base_branch_required:
+      "Tu repositorio está en HEAD desacoplado. Cambia a una rama nombrada.",
+    workspace_integration_merge_conflict:
+      "Tu rama tiene conflictos con develop. Resuélvelos antes de usar el workspace.",
+  }
+  return labels[detail] ?? "No se pudo preparar el workspace para esta corrida."
+}
 
 function promptContent(text: string, images: Array<ImageChunk>) {
   const trimmed = text.trim()
@@ -61,6 +99,15 @@ export function AgentsHome() {
   const [baseMode, setBaseMode] = useState<"integration" | "local_branch">(
     "integration"
   )
+  const session = useSession()
+  const allowNonAzure = session.data?.allow_nonazure_workspace ?? false
+  const [composeError, setComposeError] = useState<string | null>(null)
+  // Azure DevOps-first: a non-Azure workspace can't start a run unless the gate
+  // is relaxed server-side. Surfaced proactively so the user isn't left hanging.
+  const workspaceNotAzure =
+    !!selectedWorkspace &&
+    !allowNonAzure &&
+    !isAzureRemote(selectedWorkspace.remote_url)
   const repo =
     selectedWorkspace
       ? null
@@ -103,6 +150,11 @@ export function AgentsHome() {
   }, [stream.threadId, queryClient, navigate])
 
   const handleSubmit = (prompt: string, images: Array<ImageChunk>) => {
+    if (workspaceNotAzure) {
+      setComposeError(WORKSPACE_NOT_AZURE_MESSAGE)
+      return
+    }
+    setComposeError(null)
     draftRef.current = {
       prompt,
       images,
@@ -134,9 +186,20 @@ export function AgentsHome() {
         { messages: [{ type: "human", content: promptContent(prompt, images) }] },
         { config: { configurable } }
       )
-      .catch(() => {
-        // Submit failed before the SDK minted a thread id — re-enable the
-        // prompt instead of leaving it disabled until a reload.
+      .catch((err: unknown) => {
+        // Run-start failed (e.g. workspace prep 422/409). Surface it instead of
+        // leaving the thread hanging on a loading state.
+        const detail = err instanceof AgentsApiError ? err.message : ""
+        const message = detail.startsWith("workspace")
+          ? workspaceRunErrorMessage(detail)
+          : "No se pudo iniciar la corrida. Intenta de nuevo."
+        const id = stream.threadId
+        if (id) {
+          queryClient.setQueryData<AgentThread>(agentThreadKeys.detail(id), (prev) =>
+            prev ? { ...prev, status: "error", errorMessage: message } : prev
+          )
+        }
+        setComposeError(message)
         draftRef.current = null
         setSubmitting(false)
       })
@@ -157,27 +220,34 @@ export function AgentsHome() {
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-1 rounded-full border border-[var(--ui-border)] bg-[var(--ui-panel-2)] p-0.5 text-[11px]">
-                {(
-                  [
-                    ["integration", "Rama nueva desde develop"],
-                    ["local_branch", "Sobre mi rama (con develop)"],
-                  ] as const
-                ).map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setBaseMode(mode)}
-                    className={
-                      baseMode === mode
-                        ? "rounded-full bg-[var(--ui-accent)]/20 px-2.5 py-1 font-medium text-[color:var(--ui-text)]"
-                        : "rounded-full px-2.5 py-1 text-[color:var(--ui-text-muted)] hover:text-[color:var(--ui-text)]"
-                    }
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+              {workspaceNotAzure ? (
+                <p className="max-w-md text-center text-[11px] text-amber-400">
+                  Solo repositorios de Azure DevOps. Este workspace no apunta a
+                  Azure y no puede iniciar una corrida.
+                </p>
+              ) : (
+                <div className="flex items-center gap-1 rounded-full border border-[var(--ui-border)] bg-[var(--ui-panel-2)] p-0.5 text-[11px]">
+                  {(
+                    [
+                      ["integration", "Rama nueva desde develop"],
+                      ["local_branch", "Sobre mi rama (con develop)"],
+                    ] as const
+                  ).map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setBaseMode(mode)}
+                      className={
+                        baseMode === mode
+                          ? "rounded-full bg-[var(--ui-accent)]/20 px-2.5 py-1 font-medium text-[color:var(--ui-text)]"
+                          : "rounded-full px-2.5 py-1 text-[color:var(--ui-text-muted)] hover:text-[color:var(--ui-text)]"
+                      }
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
           <AgentPromptBar
@@ -190,6 +260,11 @@ export function AgentsHome() {
             selectedRepo={selectedWorkspace ? null : repo}
             onRepoChange={selectedWorkspace ? undefined : setRepoOverride}
           />
+          {composeError && (
+            <div className="w-full max-w-2xl rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-300">
+              {composeError}
+            </div>
+          )}
         </div>
       </div>
     </div>

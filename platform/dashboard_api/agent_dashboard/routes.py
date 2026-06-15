@@ -104,6 +104,7 @@ from .thread_api import (
 )
 from .workspaces import (
     WorkspaceCreate,
+    _allow_nonazure_workspace,
     list_workspaces,
     pick_and_register_workspace,
     register_workspace,
@@ -303,6 +304,7 @@ async def me(session: dict[str, Any] = _SESSION_DEP) -> dict[str, Any]:
         "tenant_id": session.get("tenant_id"),
         "avatar_url": session.get("avatar_url"),
         "is_admin": is_admin(session.get("email")),
+        "allow_nonazure_workspace": _allow_nonazure_workspace(),
     }
 
 

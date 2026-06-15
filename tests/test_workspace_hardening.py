@@ -83,6 +83,17 @@ def test_validate_workspace_rejects_non_azure_origin(tmp_path: Path) -> None:
     _assert_http_error(exc, 422, "workspace_path_not_azure_repo")
 
 
+def test_validate_workspace_allows_non_azure_with_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ON_MOBILE_AGENT_ALLOW_NONAZURE_WORKSPACE", "1")
+    repo = _init_repo(tmp_path / "repo", remote="https://github.com/acme/repo.git")
+
+    workspace = _validate_workspace("actor", WorkspaceCreate(path=str(repo), label="GH"))
+
+    assert workspace["remote_url"] == "https://github.com/acme/repo.git"
+
+
 def test_validate_workspace_rejects_fake_azure_origin_in_path(tmp_path: Path) -> None:
     repo = _init_repo(tmp_path / "repo", remote="https://example.com/dev.azure.com/org/repo")
 

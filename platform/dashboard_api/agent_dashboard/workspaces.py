@@ -130,7 +130,20 @@ def _configured_azure_devops_org() -> str | None:
     return (_azure_devops_org_from_remote(configured) or configured).strip().lower() or None
 
 
+def _allow_nonazure_workspace() -> bool:
+    """Escape hatch (default OFF): allow workspaces whose origin is not Azure DevOps.
+
+    The platform is Azure DevOps-first, so by default only Azure remotes are
+    accepted. Set ``ON_MOBILE_AGENT_ALLOW_NONAZURE_WORKSPACE=1`` for local
+    testing against non-Azure repos. Surfaced to the dashboard via ``/me`` so the
+    UI can mirror the policy.
+    """
+    return _truthy(os.environ.get("ON_MOBILE_AGENT_ALLOW_NONAZURE_WORKSPACE"))
+
+
 def _validate_azure_devops_remote(url: str | None) -> None:
+    if _allow_nonazure_workspace():
+        return
     if not _is_azure_devops_remote(url):
         raise HTTPException(422, "workspace_path_not_azure_repo")
     configured_org = _configured_azure_devops_org()

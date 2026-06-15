@@ -57,6 +57,8 @@ export interface SessionUser {
   avatar_url: string | null;
   is_admin: boolean;
   slack_oauth_enabled?: boolean;
+  // When false (default), only Azure DevOps repos can be used as workspaces.
+  allow_nonazure_workspace?: boolean;
 }
 
 export interface ModelOption {
