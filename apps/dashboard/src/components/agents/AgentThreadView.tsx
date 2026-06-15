@@ -201,13 +201,18 @@ export function AgentThreadView({ thread }: AgentThreadViewProps) {
   // Surface a run-level failure (live SDK error, or a hydrated `error` status)
   // so a failed agent turn doesn't just stop in silence.
   const streamError = (stream as unknown as { error?: unknown }).error
+  // A user Stop (or a paused HITL run) reports "interrupted" — neutral, not a
+  // failure. Don't render the abort as a red error banner.
+  const runStopped = !isStreaming && thread.status === "interrupted"
   const runError =
-    !isStreaming && (Boolean(streamError) || thread.status === "error")
-      ? streamError instanceof Error
-        ? streamError.message
-        : typeof streamError === "string" && streamError
-          ? streamError
-          : "El modelo o el sandbox fallaron. Revisa la traza o reintenta."
+    !isStreaming && !runStopped && (Boolean(streamError) || thread.status === "error")
+      ? thread.errorMessage
+        ? thread.errorMessage
+        : streamError instanceof Error
+          ? streamError.message
+          : typeof streamError === "string" && streamError
+            ? streamError
+            : "El modelo o el sandbox fallaron. Revisa la traza o reintenta."
       : null
   const lastUserText = useMemo(() => {
     for (let index = baseMessages.length - 1; index >= 0; index--) {
@@ -421,6 +426,14 @@ export function AgentThreadView({ thread }: AgentThreadViewProps) {
                       Reintentar
                     </button>
                   ) : null}
+                </div>
+              </div>
+            ) : null}
+            {runStopped ? (
+              <div className="shrink-0 px-4 pb-2">
+                <div className="mx-auto flex w-full max-w-3xl items-center gap-2 rounded-lg border border-[var(--ui-border)] bg-[var(--ui-panel-2)] px-3 py-2 text-[12px] text-[color:var(--ui-text-muted)]">
+                  <span>⏹</span>
+                  <span>Ejecución detenida por el usuario.</span>
                 </div>
               </div>
             ) : null}

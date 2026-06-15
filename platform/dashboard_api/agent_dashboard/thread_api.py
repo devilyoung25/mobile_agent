@@ -307,7 +307,11 @@ def _metadata_repo(metadata: dict[str, Any]) -> tuple[str, str, str]:
 def _run_status_to_agent_status(thread_status: str | None, run_status: str | None) -> str:
     if thread_status == "busy" or run_status in {"pending", "running"}:
         return "running"
-    if run_status in {"error", "failed", "timeout", "interrupted"}:
+    # A cancelled run (user Stop) or a paused HITL run reports "interrupted" — that
+    # is a neutral state, not a model/sandbox failure, so keep it distinct.
+    if run_status == "interrupted":
+        return "interrupted"
+    if run_status in {"error", "failed", "timeout"}:
         return "error"
     if run_status == "success":
         return "finished"
