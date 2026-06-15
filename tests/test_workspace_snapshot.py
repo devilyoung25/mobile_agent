@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from agent.dashboard.thread_api import snapshot_dashboard_workspace
-from agent.dashboard.workspace_snapshot import snapshot_workspace_sync
+from agent.dashboard.workspace_snapshot import SnapshotError, snapshot_workspace_sync
 from fastapi import HTTPException
 
 
@@ -84,6 +84,12 @@ def test_snapshot_binary_numstat_does_not_crash(tmp_path: Path) -> None:
     assert entry["deletions"] is None
 
 
+def test_snapshot_fails_closed_on_broken_worktree(tmp_path: Path) -> None:
+    # Not a git repo -> `rev-parse HEAD` fails -> raise instead of a half-built snapshot.
+    with pytest.raises(SnapshotError):
+        snapshot_workspace_sync(str(tmp_path), "deadbeef")
+
+
 def test_snapshot_clean_worktree_has_no_changes(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     base = _git_out(repo, "rev-parse", "HEAD")
@@ -134,6 +140,27 @@ async def test_service_without_workspace_returns_404() -> None:
     assert exc.value.status_code == 404
     assert exc.value.detail == "workspace_not_attached"
     snap.assert_not_awaited()
+
+
+async def test_service_snapshot_failure_returns_502() -> None:
+    thread = _owned_thread(
+        workspace_worktree_path="/wt",
+        workspace_worktree_base_commit="base-sha",
+    )
+    with (
+        patch("agent.dashboard.thread_api.langgraph_client") as client,
+        patch(
+            "agent.dashboard.thread_api.snapshot_workspace",
+            new_callable=AsyncMock,
+            side_effect=SnapshotError("boom"),
+        ),
+    ):
+        client.return_value.threads.get = AsyncMock(return_value=thread)
+        with pytest.raises(HTTPException) as exc:
+            await snapshot_dashboard_workspace("thread-1", "me")
+
+    assert exc.value.status_code == 502
+    assert exc.value.detail == "workspace_snapshot_failed"
 
 
 async def test_service_happy_path_updates_thread_metadata() -> None:

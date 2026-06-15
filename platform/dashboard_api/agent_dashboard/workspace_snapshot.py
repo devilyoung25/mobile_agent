@@ -64,9 +64,17 @@ def _commits(path: str, base_commit: str, head_commit: str) -> list[dict[str, st
     return commits
 
 
+class SnapshotError(RuntimeError):
+    """Raised when git can't produce a trustworthy snapshot (fail closed)."""
+
+
 def snapshot_workspace_sync(workspace_path: str, base_commit: str) -> dict[str, Any]:
-    _, head = _git(workspace_path, "rev-parse", "HEAD")
+    rc, head = _git(workspace_path, "rev-parse", "HEAD")
     head_commit = head.strip()
+    # Fail closed: a missing HEAD means the worktree is gone/broken — don't return a
+    # half-built snapshot that the UI would render with false confidence.
+    if rc != 0 or not head_commit:
+        raise SnapshotError("workspace_snapshot_failed")
 
     _, porcelain = _git(workspace_path, "status", "--porcelain=v1")
     porcelain_lines = [line for line in porcelain.splitlines() if line.strip()]

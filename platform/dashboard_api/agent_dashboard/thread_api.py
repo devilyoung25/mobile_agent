@@ -34,7 +34,7 @@ from .agent_overrides import normalize_profile_overrides
 from .options import is_supported_model, model_supports_effort, model_supports_images
 from .profiles import get_profile
 from .team_settings import get_team_default_model
-from .workspace_snapshot import snapshot_workspace
+from .workspace_snapshot import SnapshotError, snapshot_workspace
 from .workspaces import prepare_workspace_run
 
 logger = logging.getLogger(__name__)
@@ -650,6 +650,7 @@ async def _create_dashboard_thread_record(
         metadata["workspace_branch"] = workspace.get("current_branch")
         metadata["workspace_source_path"] = workspace.get("source_path")
         metadata["workspace_source_branch"] = workspace.get("source_branch")
+        metadata["workspace_source_commit"] = workspace.get("source_commit")
         metadata["workspace_source_is_dirty"] = workspace.get("source_is_dirty")
         metadata["workspace_worktree_path"] = workspace.get("worktree_path")
         metadata["workspace_worktree_branch"] = workspace.get("worktree_branch")
@@ -1225,7 +1226,10 @@ async def snapshot_dashboard_workspace(
     if not isinstance(worktree_path, str) or not isinstance(base_commit, str):
         raise HTTPException(404, "workspace_not_attached")
 
-    snapshot = await snapshot_workspace(worktree_path, base_commit)
+    try:
+        snapshot = await snapshot_workspace(worktree_path, base_commit)
+    except SnapshotError as exc:
+        raise HTTPException(502, "workspace_snapshot_failed") from exc
 
     diff_stats = snapshot.get("diff_stats") if isinstance(snapshot, dict) else None
     await langgraph_client().threads.update(

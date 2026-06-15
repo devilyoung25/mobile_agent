@@ -158,6 +158,18 @@ def _allow_dirty_workspace() -> bool:
     return _truthy(os.environ.get("ON_MOBILE_AGENT_ALLOW_DIRTY_WORKSPACE"))
 
 
+def _allow_stale_integration() -> bool:
+    """Escape hatch (default OFF) to work offline with a cached integration branch.
+
+    The contract is "the agent always starts from the latest develop/integration",
+    so a failed fetch fails the run closed (workspace_fetch_failed). Set
+    ``ON_MOBILE_AGENT_ALLOW_STALE_INTEGRATION=1`` to proceed with the last-known
+    ``origin/<integration>`` — the run is then recorded with ``integration_synced``
+    false so the UI/snapshot can flag that develop may not be the latest.
+    """
+    return _truthy(os.environ.get("ON_MOBILE_AGENT_ALLOW_STALE_INTEGRATION"))
+
+
 def _integration_branch(workspace: dict[str, Any]) -> str:
     configured = (workspace.get("integration_branch") or "").strip()
     if configured:
@@ -389,16 +401,25 @@ def _prepare_workspace_run_sync(
     source_dirty = bool(_run_git(source, "status", "--short"))
     if source_dirty and not _allow_dirty_workspace():
         raise HTTPException(409, "workspace_source_dirty")
+    # Lock the dev's branch HEAD at sandbox creation; the future merge-back validates
+    # the branch hasn't moved since (and is clean) before integrating the agent's work.
+    source_commit = _rev_parse(source, "HEAD")
 
     integration = _integration_branch(workspace)
     mode = _base_mode(workspace, base_mode)
 
-    # Always refresh the integration branch (develop) so the agent's base carries the
-    # latest mainline. Best-effort: offline falls back to the last-known origin ref.
+    # Contract: the agent always starts from the LATEST integration branch (develop).
+    # Fetch fails closed unless the offline escape is set (then we proceed on the
+    # cached ref with integration_synced=False so callers know it may be stale).
     synced = _fetch_origin(source, integration)
     integration_commit = _rev_parse(source, f"origin/{integration}")
     if integration_commit is None:
+        # The branch doesn't exist anywhere (not just unfetchable) -> config error.
         raise HTTPException(422, "workspace_integration_branch_missing")
+    if not synced and not _allow_stale_integration():
+        # Branch exists (cached) but we couldn't refresh it -> fail closed on the
+        # "always latest develop" contract unless the offline escape is set.
+        raise HTTPException(502, "workspace_fetch_failed")
 
     branch = _worktree_branch(thread_id)
     worktree = _worktree_path(str(workspace["id"]), thread_id)
@@ -425,6 +446,7 @@ def _prepare_workspace_run_sync(
         **workspace,
         "source_path": str(source),
         "source_branch": source_branch or None,
+        "source_commit": source_commit,
         "source_is_dirty": source_dirty,
         "base_mode": mode,
         "integration_branch": integration,

@@ -51,6 +51,10 @@ function workspaceRunErrorMessage(detail: string): string {
       "Tu repositorio está en HEAD desacoplado. Cambia a una rama nombrada.",
     workspace_integration_merge_conflict:
       "Tu rama tiene conflictos con develop. Resuélvelos antes de usar el workspace.",
+    workspace_fetch_failed:
+      "No se pudo traer el último develop desde origin (red/credenciales). El agente debe partir del último develop.",
+    workspace_snapshot_failed:
+      "No se pudo calcular el snapshot del workspace (worktree inaccesible).",
   }
   return labels[detail] ?? "No se pudo preparar el workspace para esta corrida."
 }
@@ -231,7 +235,7 @@ export function AgentsHome() {
                   {(
                     [
                       ["integration", "Rama nueva desde develop"],
-                      ["local_branch", "Sobre mi rama (con develop)"],
+                      ["local_branch", "Mi rama + último develop"],
                     ] as const
                   ).map(([mode, label]) => (
                     <button

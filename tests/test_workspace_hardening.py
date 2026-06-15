@@ -261,19 +261,58 @@ def test_prepare_missing_integration_branch_raises(
     _assert_http_error(exc, 422, "workspace_integration_branch_missing")
 
 
-def test_prepare_integration_synced_false_when_fetch_fails(
+def test_prepare_fetch_failure_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ON_MOBILE_AGENT_WORKTREE_ROOT", str(tmp_path / "wt"))
+    monkeypatch.delenv("ON_MOBILE_AGENT_ALLOW_STALE_INTEGRATION", raising=False)
+    _stub_azure_gate(monkeypatch)
+    source = _setup_origin_source(tmp_path)
+    # Break origin so the fetch fails (no network/credentials).
+    _git(source, "remote", "set-url", "origin", str(tmp_path / "missing.git"))
+
+    with pytest.raises(HTTPException) as exc:
+        _prepare_workspace_run_sync(_workspace(source), "thread-off", base_mode="integration")
+
+    _assert_http_error(exc, 502, "workspace_fetch_failed")
+
+
+def test_prepare_fetch_failure_allowed_with_stale_escape(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ON_MOBILE_AGENT_WORKTREE_ROOT", str(tmp_path / "wt"))
+    monkeypatch.setenv("ON_MOBILE_AGENT_ALLOW_STALE_INTEGRATION", "1")
+    _stub_azure_gate(monkeypatch)
+    source = _setup_origin_source(tmp_path)
+    _git(source, "remote", "set-url", "origin", str(tmp_path / "missing.git"))
+
+    prepared = _prepare_workspace_run_sync(_workspace(source), "thread-off", base_mode="integration")
+
+    assert prepared["integration_synced"] is False  # proceeded on cached develop
+    assert Path(prepared["worktree_path"]).is_dir()
+
+
+def test_prepare_local_branch_persists_base_invariants(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("ON_MOBILE_AGENT_WORKTREE_ROOT", str(tmp_path / "wt"))
     _stub_azure_gate(monkeypatch)
     source = _setup_origin_source(tmp_path)
-    # Break origin so fetch fails, but origin/develop tracking ref already exists.
-    _git(source, "remote", "set-url", "origin", str(tmp_path / "missing.git"))
+    _git(source, "checkout", "-b", "feature/x")
+    (source / "feature.txt").write_text("f\n", encoding="utf-8")
+    _git(source, "add", "feature.txt")
+    _git(source, "commit", "-m", "feature work")
+    source_head = _git(source, "rev-parse", "HEAD")
 
-    prepared = _prepare_workspace_run_sync(_workspace(source), "thread-off", base_mode="integration")
+    prepared = _prepare_workspace_run_sync(_workspace(source), "thread-inv", base_mode="local_branch")
 
-    assert prepared["integration_synced"] is False
-    assert Path(prepared["worktree_path"]).is_dir()
+    # Every base invariant needed for a safe merge-back must be demonstrable.
+    assert prepared["source_branch"] == "feature/x"
+    assert prepared["source_commit"] == source_head
+    assert prepared["integration_branch"] == "develop"
+    assert prepared["integration_commit"]
+    assert prepared["integration_synced"] is True
+    assert prepared["worktree_base_commit"]
 
 
 def test_prepare_invalid_base_mode_raises(
