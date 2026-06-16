@@ -34,7 +34,19 @@ TASK_KINDS: tuple[str, ...] = (
 
 
 class DeveloperProfile(BaseModel):
-    """Operating context for a development team/stack. Immutable (frozen)."""
+    """Operating context for a development team/stack. Immutable (frozen).
+
+    What is actually ENFORCED today vs. what is METADATA/context (be honest so a
+    future reader doesn't assume guarantees that aren't there yet):
+
+    - Enforced: ``allowed_projects`` (profile matching + ``effective_scope`` → the
+      Capability Gateway's ``project_scope``), ``domain_pack`` (which capability
+      pack loads), ``integration_branch`` (workspace prep base).
+    - Context/metadata (NOT yet a hard boundary): ``allowed_repos`` (enforced only
+      where an ADO tool call carries a repo arg — see the gateway scope guard),
+      ``technical_notes``/``operating_rules``/``stack`` (prompt context),
+      ``context_providers``/``business_knowledge_indexes`` (ContextResolver inputs).
+    """
 
     model_config = ConfigDict(frozen=True)
 

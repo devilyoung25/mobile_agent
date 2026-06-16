@@ -14,8 +14,10 @@ approval, and Azure DevOps reporting.
 - Azure DevOps MCP as the source of Boards, Work Items, Repos, Pull Requests,
   Pipelines, Builds, Test Plans, Wiki, and Search context.
 - Provider-neutral model launching, including Ollama and cloud models.
-- Android Mobile Engineering Skill as the primary technical skill.
-- Android Mobile Skills MCP for Android knowledge and workflow guidance.
+- DeveloperProfile as the per-team operating unit (Azure DevOps scope, stack, task
+  kinds, rules); resolved per run and used to scope tools and build context.
+- Android Skills MCP / Knowledge MCP as read-only context providers (technical and
+  business knowledge), fed into the run via the ContextResolver.
 - Mobile QA Runner for Gradle, ADB, emulator, screenshots, logcat, and QA reports.
 - Workspace Manager for isolated repository checkout, branch state, diff capture,
   and PR preparation.
@@ -60,8 +62,9 @@ code should move toward `engine/`, `packages/`, `platform/`, and `apps/`.
   approve PRs, or close Work Items automatically.
 - MCP servers provide structured tools and context. They do not replace the
   orchestrator or policy layer.
-- Android Mobile Skills MCP provides knowledge only. Real Gradle, ADB, emulator,
-  screenshot, and logcat execution belongs to Mobile QA Runner.
+- Android Skills MCP is a read-only context provider (knowledge only); it does not
+  authorize tools. Real Gradle, ADB, emulator, screenshot, and logcat execution
+  belongs to Mobile QA Runner.
 
 ## Local Development
 

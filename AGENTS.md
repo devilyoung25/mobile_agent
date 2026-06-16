@@ -84,8 +84,10 @@ cd apps/dashboard && npm run lint
   require policy and human approval.
 - GitHub support is legacy compatibility only. Do not make GitHub a central
   dependency for new workflows.
-- Android Mobile Skills MCP is knowledge/context only. It must not run Gradle,
-  ADB, emulators, installs, screenshots, or logcat.
+- Android Skills MCP is a **read-only context provider** (technical knowledge/context),
+  fed into the run via the ContextResolver. It does not authorize tools and must not run
+  Gradle, ADB, emulators, installs, screenshots, or logcat. (There is no formal
+  "SkillResolver": the DeveloperProfile is the operating unit — see ADR 0001.)
 - Mobile QA Runner owns real Gradle/ADB/emulator execution and must expose
   controlled, auditable actions.
 - Workspace Manager owns clone, branch, credential, diff, and PR-preparation
@@ -114,10 +116,10 @@ The intended flow is:
 Dashboard UI
 -> Microsoft Entra Auth
 -> Backend / SDLC Orchestrator
+-> DeveloperProfile + TaskResolver + ContextResolver (composition)
 -> AgentEngine
--> Azure DevOps MCP
--> Android Mobile Engineering Skill
--> Android Mobile Skills MCP
+-> Azure DevOps MCP (governed tools)
+-> Android Skills MCP / Knowledge MCP (read-only context providers)
 -> Workspace Manager
 -> Mobile QA Runner
 -> Human Approval

@@ -10,6 +10,26 @@
 Este ADR fija las decisiones de arquitectura para que el producto escale sin
 reescrituras y sin que se filtren responsabilidades entre capas.
 
+## Actualización 2026-06 — DeveloperProfile (supersede `domain/skill` formal)
+
+> Esta sección **prevalece** sobre las menciones de *domain-packs*, *skills* formales,
+> *SkillResolver* y *Skill como contrato* que aparecen más abajo (registro histórico).
+
+La unidad operativa del MVP es el **`DeveloperProfile`** (`agent/composition/developer_profiles.py`):
+describe el mundo operativo de un equipo/stack (proyectos/repos ADO, rama de integración, stack,
+task kinds, reglas). La composición resuelve, por-run y en orden:
+`resolve_developer_profile` → `resolve_task_kind` (TaskResolver) → `resolve_operating_context`
+(ContextResolver) → `load_tools_for` (CapabilityGateway) → `construct_system_prompt` → engine.
+
+Reglas vigentes:
+- **NO hay un `SkillResolver` formal** ni "Skill como contrato". No se reintroduce.
+- **`domain_pack`** queda como **id interno de capability-pack** (compat con el CapabilityGateway),
+  no como "domain-pack" versionado con skills/evidencia/evals.
+- **Android Skills MCP / Knowledge MCP = context providers read-only** (aportan contexto técnico/
+  de negocio vía el `ContextProvider` seam del ContextResolver). **No autorizan nada.**
+- **El CapabilityGateway es quien autoriza tools.** Entra es la autoridad de identidad/scope; el
+  profile **acota** dentro de lo que el actor ya puede ver y **agrega contexto**, nunca concede.
+
 ## Capas (responsabilidades, sin mezclar)
 
 1. **apps/dashboard** — UI. Habla con platform. No razona ni ejecuta tools.
