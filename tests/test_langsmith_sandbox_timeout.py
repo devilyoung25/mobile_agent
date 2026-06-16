@@ -7,9 +7,8 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from langsmith.sandbox import CommandTimeoutError, SandboxConnectionError
-
 from agent.integrations.langsmith import TimeoutLangSmithSandbox
+from langsmith.sandbox import CommandTimeoutError, SandboxConnectionError
 
 
 class _FakeHandle:

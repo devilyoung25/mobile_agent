@@ -23,9 +23,21 @@ async def test_classifies_exact_label() -> None:
         assert await resolve_task_kind("add a new settings screen") == "implementation"
 
 
-async def test_classifies_label_in_prose() -> None:
-    with _patch_model("The task is bug_analysis."):
-        assert await resolve_task_kind("the app crashes on login") == "bug_analysis"
+async def test_classifies_label_with_formatting() -> None:
+    # Quotes/backticks/trailing period around a bare label still match.
+    with _patch_model("`implementation`."):
+        assert await resolve_task_kind("add a settings screen") == "implementation"
+
+
+async def test_uses_last_line_for_reasoning_models() -> None:
+    with _patch_model("Let me think about this...\ntesting_validation"):
+        assert await resolve_task_kind("add unit tests") == "testing_validation"
+
+
+async def test_sentence_containing_label_is_rejected() -> None:
+    # A full sentence is not a label: strict match avoids the "no es implementation" bug.
+    with _patch_model("esto no es implementation"):
+        assert await resolve_task_kind("algo") is None
 
 
 async def test_classifies_from_list_content() -> None:

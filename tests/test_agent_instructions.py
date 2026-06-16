@@ -4,13 +4,13 @@ import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
-from agent import server
 from agent.dashboard.agent_instructions import (
     create_agent_instructions,
     get_repo_agent_instructions,
     set_agent_instructions,
 )
+
+from agent import server
 from agent.prompt import construct_system_prompt
 
 

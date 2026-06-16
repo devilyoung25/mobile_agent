@@ -3,14 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from cryptography.fernet import Fernet
-from pydantic import ValidationError
-
-from agent.dashboard import team_credentials as tc
 from agent.dashboard.team_credentials import (
     DatadogCredentialsUpdate,
     LangSmithCredentialsUpdate,
 )
+from cryptography.fernet import Fernet
+from pydantic import ValidationError
+
+from agent.dashboard import team_credentials as tc
 
 
 class _FakeStore:

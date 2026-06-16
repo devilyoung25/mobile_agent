@@ -36,6 +36,7 @@ from .composition.sandbox_resolution import (
     graph_loaded_for_execution,
     resolve_run_sandbox,
 )
+from .composition.scope_guard import enforce_profile_scope
 from .composition.tool_resolution import (
     _load_observability_tools,
     _observability_authorized,
@@ -131,10 +132,18 @@ async def get_agent(config: RunnableConfig) -> Pregel:
         _load_observability_tools(observability_authorized),
     )
     developer_profile = resolve_developer_profile(actor_id, actor_scope)
+    effective_scope = developer_profile.effective_scope(actor_scope)
     gateway_tools = await load_tools_for(
         actor_id,
         domain_pack=developer_profile.domain_pack,
-        project_scope=developer_profile.effective_scope(actor_scope),
+        project_scope=effective_scope,
+    )
+    # Enforce the profile's project/repo boundary on the resolved tools. Entra still
+    # bounds access; this fences the run to the profile's focus within that access.
+    gateway_tools = enforce_profile_scope(
+        gateway_tools,
+        allowed_projects=effective_scope,
+        allowed_repos=developer_profile.allowed_repos,
     )
 
     # The TaskResolver (run-creation) classifies the request into a task_kind; the
@@ -145,6 +154,21 @@ async def get_agent(config: RunnableConfig) -> Pregel:
     operating_context = (
         await resolve_operating_context(developer_profile, task_kind, actor_scope)
     ).render()
+
+    # Persist profile/task metadata for UI/audit/debug (not surfaced to the LLM).
+    try:
+        await client.threads.update(
+            thread_id=thread_id,
+            metadata={
+                "developer_profile_id": developer_profile.id,
+                "developer_profile_label": developer_profile.label,
+                "task_kind": task_kind or "",
+                "effective_project_scope": effective_scope,
+                "integration_branch": developer_profile.integration_branch,
+            },
+        )
+    except Exception:
+        logger.debug("Failed to persist profile metadata for thread %s", thread_id, exc_info=True)
 
     logger.info("Returning agent with sandbox for thread %s", thread_id)
     return build_engine(

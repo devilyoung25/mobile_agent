@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from langchain_core.tools import StructuredTool
 from langgraph.graph.state import RunnableConfig
 
 from agent.server import get_agent
@@ -35,16 +36,27 @@ async def test_engine_run_uses_actor_identity_and_azure_devops_tools() -> None:
     )
     # A resolved Azure DevOps tool from the Capability Gateway carries non-sensitive
     # capability metadata (provenance "azure-devops") so composition can detect it.
-    ado_tool = MagicMock(name="ado_tool")
-    ado_tool.name = "repo_list_repos_by_project"
-    ado_tool.metadata = {
-        "capability": {
-            "name": "azure_devops.read",
-            "requires_approval": False,
-            "provenance_tags": ["azure-devops", "read-only", "mobile"],
-            "implementation_kind": "mcp",
-        }
-    }
+    # Real tool (not a MagicMock) because composition now wraps it with the scope guard.
+    def _ado_run(project: str = "") -> str:
+        return f"repos:{project}"
+
+    async def _ado_arun(project: str = "") -> str:
+        return f"repos:{project}"
+
+    ado_tool = StructuredTool.from_function(
+        func=_ado_run,
+        coroutine=_ado_arun,
+        name="repo_list_repos_by_project",
+        description="List repos by project",
+        metadata={
+            "capability": {
+                "name": "azure_devops.read",
+                "requires_approval": False,
+                "provenance_tags": ["azure-devops", "read-only", "mobile"],
+                "implementation_kind": "mcp",
+            }
+        },
+    )
 
     with (
         patch(
@@ -89,7 +101,8 @@ async def test_engine_run_uses_actor_identity_and_azure_devops_tools() -> None:
     # engine) whenever Azure DevOps tools are resolved — replaces the old `code_host` arg.
     assert prompt.call_args.kwargs["integration_policy"] is not None
     loaded_tools = build_engine.call_args.kwargs["tools"]
-    assert ado_tool in loaded_tools
     tool_names = {getattr(t, "__name__", getattr(t, "name", "")) for t in loaded_tools}
+    # The ADO tool is present (wrapped by the scope guard; identity changes, name is kept).
+    assert "repo_list_repos_by_project" in tool_names
     assert "open_pull_request" not in tool_names
     assert "request_pr_review" not in tool_names

@@ -3,7 +3,6 @@
 from unittest.mock import patch
 
 import pytest
-
 from agent.integrations.langsmith import (
     DEFAULT_SANDBOX_DELETE_AFTER_STOP_SECONDS,
     DEFAULT_SANDBOX_IDLE_TTL_SECONDS,

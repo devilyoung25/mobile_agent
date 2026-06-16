@@ -74,16 +74,28 @@ def _response_text(response: Any) -> str:
     return str(content or "")
 
 
+def _clean_label(raw: str) -> str:
+    """Reduce a model response to a bare label candidate.
+
+    Reasoning models sometimes preface the answer, so the label is taken from the
+    last non-empty line and stripped of quotes/backticks/trailing punctuation.
+    """
+    text = (raw or "").strip()
+    if "\n" in text:
+        lines = [line for line in text.splitlines() if line.strip()]
+        text = lines[-1] if lines else ""
+    # Strip surrounding whitespace, quotes, backticks and trailing punctuation at once.
+    return text.strip(" \t`'\".:").lower()
+
+
 def _match_kind(raw: str, kinds: Sequence[str]) -> str | None:
-    normalized = raw.strip().lower()
-    if not normalized:
+    # Strict exact match (no "contained substring": that misclassifies sentences like
+    # "esto no es implementation"). The prompt asks for only the label.
+    cleaned = _clean_label(raw)
+    if not cleaned:
         return None
     for kind in kinds:
-        if kind.lower() == normalized:
-            return kind
-    # The model may wrap the label in prose; accept a contained exact id.
-    for kind in kinds:
-        if kind.lower() in normalized:
+        if kind.lower() == cleaned:
             return kind
     return None
 

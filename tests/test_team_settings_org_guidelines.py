@@ -3,13 +3,12 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from pydantic import ValidationError
-
 from agent.dashboard.team_settings import (
     ORG_GUIDELINES_MAX_CHARS,
     TeamSettingsUpdate,
     get_org_review_guidelines,
 )
+from pydantic import ValidationError
 
 
 def test_org_guidelines_blank_normalizes_to_none() -> None:

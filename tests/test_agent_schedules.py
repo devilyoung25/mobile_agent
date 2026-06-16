@@ -3,10 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from agent.dashboard.schedules import ScheduleCreateBody, ScheduleUpdateBody
 from pydantic import ValidationError
 
 from agent.dashboard import schedules
-from agent.dashboard.schedules import ScheduleCreateBody, ScheduleUpdateBody
 
 
 class _FakeStore:
