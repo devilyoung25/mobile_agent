@@ -55,6 +55,21 @@ def test_integration_policy_precedes_mode_pack() -> None:
     assert prompt.index(marker) < prompt.index("Mode: Workspace (development)")
 
 
+def test_software_engineering_discipline_pack_present() -> None:
+    # The neutral SWE identity/discipline pack is always present, before the mode pack,
+    # and introduces no brand (Azure/Android/Entra) of its own.
+    from on_core.prompt import SOFTWARE_ENGINEERING
+
+    prompt = construct_system_prompt(working_dir="/work", mode="workspace")
+    assert "Software engineering discipline" in prompt
+    assert "Understand before changing" in prompt
+    assert prompt.index("Software engineering discipline") < prompt.index(
+        "Mode: Workspace (development)"
+    )
+    for brand in ("Azure", "Android", "Entra"):
+        assert brand not in SOFTWARE_ENGINEERING
+
+
 def test_operating_context_injected_only_when_provided() -> None:
     marker = "OPERATING-CONTEXT-MARKER"
     with_ctx = construct_system_prompt(
