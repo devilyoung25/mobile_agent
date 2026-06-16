@@ -54,7 +54,9 @@ def _parse_count(value: str) -> int | None:
 def _commits(path: str, base_commit: str, head_commit: str) -> list[dict[str, str]]:
     if not head_commit or head_commit == base_commit:
         return []
-    _, log = _git(path, "log", "--format=%H%x00%s", f"{base_commit}..HEAD")
+    rc, log = _git(path, "log", "--format=%H%x00%s", f"{base_commit}..HEAD")
+    if rc != 0:
+        raise SnapshotError("workspace_snapshot_failed")
     commits: list[dict[str, str]] = []
     for line in log.splitlines():
         if "\x00" not in line:
@@ -76,13 +78,23 @@ def snapshot_workspace_sync(workspace_path: str, base_commit: str) -> dict[str, 
     if rc != 0 or not head_commit:
         raise SnapshotError("workspace_snapshot_failed")
 
-    _, porcelain = _git(workspace_path, "status", "--porcelain=v1")
+    base_rc, resolved_base = _git(
+        workspace_path, "rev-parse", "--verify", "--quiet", f"{base_commit}^{{commit}}"
+    )
+    if base_rc != 0 or not resolved_base.strip():
+        raise SnapshotError("workspace_snapshot_failed")
+
+    status_rc, porcelain = _git(workspace_path, "status", "--porcelain=v1")
+    if status_rc != 0:
+        raise SnapshotError("workspace_snapshot_failed")
     porcelain_lines = [line for line in porcelain.splitlines() if line.strip()]
     is_dirty = bool(porcelain_lines)
     untracked = [line[3:] for line in porcelain_lines if line.startswith("?? ")]
 
-    _, numstat = _git(workspace_path, "diff", "--numstat", base_commit)
-    _, name_status = _git(workspace_path, "diff", "--name-status", base_commit)
+    numstat_rc, numstat = _git(workspace_path, "diff", "--numstat", base_commit)
+    name_status_rc, name_status = _git(workspace_path, "diff", "--name-status", base_commit)
+    if numstat_rc != 0 or name_status_rc != 0:
+        raise SnapshotError("workspace_snapshot_failed")
 
     status_by_path: dict[str, str] = {}
     for line in name_status.splitlines():

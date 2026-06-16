@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import os
 import platform
 import re
@@ -33,6 +34,8 @@ _WORKTREE_MERGE_USER_NAME = "ON Mobile Agent"
 _WORKTREE_MERGE_USER_EMAIL = "on-mobile-agent@noreply.local"
 _BASE_MODE_INTEGRATION = "integration"
 _BASE_MODE_LOCAL_BRANCH = "local_branch"
+
+logger = logging.getLogger(__name__)
 
 
 class WorkspaceCreate(BaseModel):
@@ -194,7 +197,13 @@ def _run_git(path: Path, *args: str) -> str:
         timeout=10,
     )
     if result.returncode != 0:
-        raise HTTPException(422, f"workspace_git_error: {result.stderr.strip() or result.stdout.strip()}")
+        logger.warning(
+            "workspace git command failed path=%s args=%s returncode=%s",
+            path,
+            args,
+            result.returncode,
+        )
+        raise HTTPException(422, "workspace_git_error")
     return result.stdout.strip()
 
 

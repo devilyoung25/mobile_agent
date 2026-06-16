@@ -90,6 +90,13 @@ def test_snapshot_fails_closed_on_broken_worktree(tmp_path: Path) -> None:
         snapshot_workspace_sync(str(tmp_path), "deadbeef")
 
 
+def test_snapshot_fails_closed_on_missing_base_commit(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+
+    with pytest.raises(SnapshotError):
+        snapshot_workspace_sync(str(repo), "deadbeef")
+
+
 def test_snapshot_clean_worktree_has_no_changes(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     base = _git_out(repo, "rev-parse", "HEAD")

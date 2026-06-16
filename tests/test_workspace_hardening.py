@@ -6,6 +6,7 @@ import pytest
 from agent.dashboard.workspaces import (
     WorkspaceCreate,
     _prepare_workspace_run_sync,
+    _run_git,
     _validate_workspace,
     _worktree_branch,
     _worktree_path,
@@ -63,6 +64,13 @@ def test_validate_workspace_rejects_non_git_directory(tmp_path: Path) -> None:
         _validate_workspace("actor", WorkspaceCreate(path=str(tmp_path)))
 
     _assert_http_error(exc, 422, "workspace_path_not_git_repo")
+
+
+def test_run_git_does_not_surface_git_output(tmp_path: Path) -> None:
+    with pytest.raises(HTTPException) as exc:
+        _run_git(tmp_path, "rev-parse", "--show-toplevel")
+
+    _assert_http_error(exc, 422, "workspace_git_error")
 
 
 def test_validate_workspace_rejects_missing_origin(tmp_path: Path) -> None:
