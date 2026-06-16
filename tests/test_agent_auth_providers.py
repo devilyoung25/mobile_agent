@@ -63,7 +63,11 @@ async def test_engine_run_uses_actor_identity_and_azure_devops_tools() -> None:
         patch("agent.composition.model_resolution.get_gateway_models", new_callable=AsyncMock, return_value=[]),
         patch("agent.composition.model_resolution.create_model_plan", return_value=model_plan),
         patch("agent.server.construct_system_prompt", return_value="prompt") as prompt,
-        patch("agent.server.resolve_actor_scope", new_callable=AsyncMock, return_value=["AppMovil"]),
+        patch(
+            "agent.server.resolve_actor_scope",
+            new_callable=AsyncMock,
+            return_value=["TryController 2.0"],
+        ),
         patch(
             "agent.server.load_tools_for",
             new_callable=AsyncMock,
@@ -76,8 +80,9 @@ async def test_engine_run_uses_actor_identity_and_azure_devops_tools() -> None:
 
     resolve_sandbox.assert_awaited_once()
     load_profile.assert_awaited_once_with("entra:user-oid")
+    # project_scope is the profile's effective scope (actor scope ∩ profile projects).
     load_tools.assert_awaited_once_with(
-        "entra:user-oid", domain_pack="mobile", project_scope=["AppMovil"]
+        "entra:user-oid", domain_pack="mobile", project_scope=["TryController 2.0"]
     )
     assert record_usage.await_args.kwargs["actor_id"] == "entra:user-oid"
     # Azure policy is injected into the prompt as integration policy (provider-neutral

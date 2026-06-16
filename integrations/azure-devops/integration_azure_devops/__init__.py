@@ -11,7 +11,7 @@ import os
 from datetime import timedelta
 from typing import Any
 
-from mcp_toolset import McpToolsetProvider, ToolPolicy
+from capability_gateway import McpToolsetProvider, ToolPolicy
 
 DEFAULT_AZURE_DEVOPS_DOMAINS = "core,work,work-items,repositories,pipelines,test-plans,search,wiki"
 REMOTE_TOOLSET_BY_DOMAIN = {

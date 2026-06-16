@@ -13,10 +13,9 @@ is the target architecture.
 apps/dashboard/              Dashboard UI.
 engine/agent-engine-core/    Provider-neutral engine package.
 packages/model-launcher/     Model abstraction.
-packages/mcp-toolset/        Generic MCP tool loading and policy.
-packages/identity-entra/     Microsoft Entra identity provider.
-packages/integration-azure-devops/
-                             Azure DevOps MCP integration preset.
+packages/capability-gateway/ Capability Gateway: governed tools via adapters (MCP) + policy.
+integrations/azure-devops/   Azure DevOps MCP integration preset.
+integrations/entra/          Microsoft Entra identity provider.
 platform/dashboard_api/      Dashboard/session/orchestration API.
 platform/integrations/       Runtime integrations outside the engine.
 agent/                       Compatibility/runtime entrypoints during migration.

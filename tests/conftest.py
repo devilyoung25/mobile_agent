@@ -14,6 +14,9 @@ def _model_registry_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MODEL_GATEWAY_SUBAGENT_MODEL", "on-auto-coder")
     monkeypatch.setenv("MODEL_GATEWAY_EFFORTS", "medium")
     monkeypatch.setenv("MODEL_GATEWAY_DEFAULT_EFFORT", "medium")
+    # DeveloperProfile Azure DevOps scope (real onoff-solution project names).
+    monkeypatch.setenv("ON_DEVPROFILE_TRYCONTROLLER_PROJECTS", "TryController 2.0,VendaMas 2.0")
+    monkeypatch.setenv("ON_DEVPROFILE_TRYCONTROLLER_REPOS", "AppMóvil")
     for key in (
         "ANTHROPIC_API_KEY",
         "OPENAI_API_KEY",

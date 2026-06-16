@@ -4,11 +4,11 @@ version = "0.1.0"
 description = "Azure DevOps MCP preset: server config + read-only tool policy"
 requires-python = ">=3.11"
 dependencies = [
-    "on-mcp-toolset",
+    "on-capability-gateway",
 ]
 
 [tool.uv.sources]
-on-mcp-toolset = { workspace = true }
+on-capability-gateway = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

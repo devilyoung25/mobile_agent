@@ -2,6 +2,11 @@
 
 Adapters know how to reach a backing implementation. Governance stays in the
 gateway pipeline; adapters only load raw tools from their origin.
+
+Today the only implementation kind is ``mcp``. The :class:`CapabilityAdapter`
+protocol and the ``kind`` dispatch in ``gateway`` keep MCP as *one* adapter
+rather than the root abstraction, so a future kind (e.g. a REST integration or
+a ``native`` in-process capability) is an additive change, not a rewrite.
 """
 
 from __future__ import annotations
@@ -62,28 +67,6 @@ class McpAdapter:
             )
             return []
         return [tool for tool in tools if isinstance(tool, BaseTool)]
-
-
-class RestAdapter:
-    """Scaffold for REST-backed capabilities.
-
-    No concrete REST capability is enabled in this MVP. Returning an empty list
-    keeps the gateway fail-soft while preserving the adapter contract.
-    """
-
-    async def load_tools(
-        self,
-        descriptor: CapabilityDescriptor,
-        credential: ResolvedCredential,
-        context: CapabilityContext,
-    ) -> list[BaseTool]:
-        logger.info(
-            "REST capability has no concrete tool implementation yet: capability=%s domain_pack=%s credential_kind=%s",
-            descriptor.name,
-            context.domain_pack,
-            credential.kind,
-        )
-        return []
 
 
 def _azure_devops_provider(credential: ResolvedCredential):

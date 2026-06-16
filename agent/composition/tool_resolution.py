@@ -1,15 +1,14 @@
 """Tool-resolution helpers for agent composition.
 
-Selects the domain pack for a run and loads the (authorized) team observability
-tools. The Capability Gateway call itself (``load_tools_for``) and the actor scope
-resolution stay in ``server.py`` for now. Extracted without behaviour change.
+Loads the (authorized) team observability tools. The Capability Gateway call
+(``load_tools_for``), actor-scope resolution, and DeveloperProfile selection stay
+in ``server.py``. Extracted without behaviour change.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from typing import Any
 
 from langgraph.graph.state import RunnableConfig
@@ -19,14 +18,6 @@ from ..integrations.datadog_mcp import load_datadog_tools
 from ..integrations.langsmith_tools import load_langsmith_tools
 
 logger = logging.getLogger(__name__)
-
-
-def _domain_pack(configurable: dict[str, Any]) -> str:
-    """Domain pack for this run (per-run override → env → default ``mobile``)."""
-    pack = configurable.get("domain_pack")
-    if isinstance(pack, str) and pack.strip():
-        return pack.strip()
-    return os.environ.get("ON_MOBILE_AGENT_DOMAIN_PACK", "mobile")
 
 
 def _observability_authorized(config: RunnableConfig) -> bool:

@@ -55,6 +55,31 @@ def test_integration_policy_precedes_mode_pack() -> None:
     assert prompt.index(marker) < prompt.index("Mode: Workspace (development)")
 
 
+def test_operating_context_injected_only_when_provided() -> None:
+    marker = "OPERATING-CONTEXT-MARKER"
+    with_ctx = construct_system_prompt(
+        working_dir="/work", operating_context=f"## Operating context\n{marker}"
+    )
+    without_ctx = construct_system_prompt(working_dir="/work")
+    assert marker in with_ctx
+    assert marker not in without_ctx
+
+
+def test_operating_context_between_integration_and_mode() -> None:
+    # Physical order must match the authority hierarchy:
+    # integration (3) < operating context (4) < mode (5).
+    integration = "AZURE-DEVOPS-POLICY-MARKER"
+    ctx = "OPERATING-CONTEXT-MARKER"
+    prompt = construct_system_prompt(
+        working_dir="/work",
+        mode="workspace",
+        integration_policy=f"### Integration\n{integration}",
+        operating_context=f"## Operating context\n{ctx}",
+    )
+    assert prompt.index(integration) < prompt.index(ctx)
+    assert prompt.index(ctx) < prompt.index("Mode: Workspace (development)")
+
+
 def test_human_approval_gate_present_in_both_modes() -> None:
     for mode in ("workspace", "consultative"):
         prompt = construct_system_prompt(working_dir="/work", mode=mode)

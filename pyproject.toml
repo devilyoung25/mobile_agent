@@ -7,7 +7,7 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
     "on-model-launcher",
-    "on-mcp-toolset",
+    "on-capability-gateway",
     "on-integration-azure-devops",
     "on-identity-entra",
     "on-core",
@@ -45,11 +45,11 @@ dev = [
 ]
 
 [tool.uv.workspace]
-members = ["engine/*", "packages/*"]
+members = ["engine/*", "packages/*", "integrations/*"]
 
 [tool.uv.sources]
 on-model-launcher = { workspace = true }
-on-mcp-toolset = { workspace = true }
+on-capability-gateway = { workspace = true }
 on-integration-azure-devops = { workspace = true }
 on-identity-entra = { workspace = true }
 on-core = { workspace = true }

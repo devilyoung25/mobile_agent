@@ -5,11 +5,8 @@ import logging
 from unittest.mock import AsyncMock
 
 import pytest
-from langchain_core.tools import StructuredTool
-from mcp_toolset import (
-    CapabilityAdapter,
+from capability_gateway import (
     CapabilityContext,
-    CapabilityCredential,
     CapabilityDescriptor,
     CapabilityImplementation,
     CapabilityPolicy,
@@ -17,8 +14,8 @@ from mcp_toolset import (
     ToolPolicy,
     load_tools_for,
 )
-from mcp_toolset.adapters import RestAdapter
-from mcp_toolset.gateway import _ADAPTERS, _load_capability_tools
+from capability_gateway.gateway import _ADAPTERS, _load_capability_tools
+from langchain_core.tools import StructuredTool
 
 
 def _tool(name: str) -> StructuredTool:
@@ -84,7 +81,7 @@ async def test_mobile_pack_loads_azure_devops_read_tools_with_metadata(
 ) -> None:
     caplog.set_level(logging.INFO)
     monkeypatch.setattr(
-        "mcp_toolset.gateway._mint_azure_devops_bearer",
+        "capability_gateway.gateway._mint_azure_devops_bearer",
         AsyncMock(return_value="secret-token"),
     )
 
@@ -93,7 +90,7 @@ async def test_mobile_pack_loads_azure_devops_read_tools_with_metadata(
         assert credential.value == "secret-token"
         return _FakeProvider()
 
-    monkeypatch.setattr("mcp_toolset.adapters._azure_devops_provider", fake_provider)
+    monkeypatch.setattr("capability_gateway.adapters._azure_devops_provider", fake_provider)
 
     tools = await load_tools_for(
         "entra:actor",
@@ -117,10 +114,10 @@ async def test_mobile_pack_without_actor_token_does_not_dispatch(
 ) -> None:
     provider = AsyncMock()
     monkeypatch.setattr(
-        "mcp_toolset.gateway._mint_azure_devops_bearer",
+        "capability_gateway.gateway._mint_azure_devops_bearer",
         AsyncMock(return_value=None),
     )
-    monkeypatch.setattr("mcp_toolset.adapters._azure_devops_provider", provider)
+    monkeypatch.setattr("capability_gateway.adapters._azure_devops_provider", provider)
 
     assert await load_tools_for("entra:actor", domain_pack="mobile", project_scope=[]) == []
     provider.assert_not_called()
@@ -149,34 +146,15 @@ async def test_capability_policy_deny_skips_adapter(monkeypatch: pytest.MonkeyPa
 
 async def test_capability_timeout_degrades_to_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "mcp_toolset.gateway._mint_azure_devops_bearer",
+        "capability_gateway.gateway._mint_azure_devops_bearer",
         AsyncMock(return_value="secret-token"),
     )
     monkeypatch.setattr(
-        "mcp_toolset.adapters._azure_devops_provider",
+        "capability_gateway.adapters._azure_devops_provider",
         lambda _credential: _SlowProvider(),
     )
 
     assert await load_tools_for("entra:actor", domain_pack="mobile", project_scope=[]) == []
-
-
-async def test_rest_adapter_scaffold_satisfies_protocol_and_returns_empty() -> None:
-    adapter = RestAdapter()
-    assert isinstance(adapter, CapabilityAdapter)
-    descriptor = CapabilityDescriptor(
-        name="internal.rest.placeholder",
-        description="Internal REST placeholder",
-        input_schema=None,
-        output_schema=None,
-        implementation=CapabilityImplementation(kind="rest"),
-        credential=CapabilityCredential(kind="none"),
-    )
-    tools = await adapter.load_tools(
-        descriptor,
-        ResolvedCredential(kind="none"),
-        CapabilityContext(actor_id=None, domain_pack="mobile", project_scope=()),
-    )
-    assert tools == []
 
 
 async def test_requires_approval_metadata_is_exposed(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -24,7 +24,7 @@ reescrituras y sin que se filtren responsabilidades entre capas.
    Azure, Entra, Android ni MCPs concretos. (Garantizado por
    `tests/test_engine_neutrality.py`.)
 5. **model-gateway** — única fuente de verdad de modelos y capacidades.
-6. **capability-gateway** (`packages/mcp-toolset`) — gobierna tools: registro de
+6. **capability-gateway** (`packages/capability-gateway`) — gobierna tools: registro de
    capabilities, validación, inyección de credenciales por-actor, allow/deny,
    provenance/audit y dispatch. MCP es un adapter del gateway, no la abstracción raíz.
 7. **MCP/REST/SDK servers** — las "manos": ADO, Android Knowledge, Business

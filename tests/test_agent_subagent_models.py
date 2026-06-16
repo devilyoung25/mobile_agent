@@ -4,7 +4,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from langgraph.graph.state import RunnableConfig
 
+from agent.composition.developer_profiles import DeveloperProfile
 from agent.server import get_agent
+
+_TEST_PROFILE = DeveloperProfile(
+    id="trycontroller_android",
+    label="Test profile",
+    business_line="trycontroller",
+    allowed_projects=("TryController 2.0",),
+    domain_pack="mobile",
+)
 
 
 class _DummyAgent:
@@ -41,6 +50,7 @@ async def test_agent_uses_profile_subagent_model_override(
 
     with (
         patch("agent.server.resolve_triggering_user_identity", return_value=None),
+        patch("agent.server.resolve_developer_profile", return_value=_TEST_PROFILE),
         patch(
             "agent.server.resolve_run_sandbox",
             new_callable=AsyncMock,
@@ -106,6 +116,7 @@ async def test_agent_subagent_inherits_profile_model_override_without_explicit_p
 
     with (
         patch("agent.server.resolve_triggering_user_identity", return_value=None),
+        patch("agent.server.resolve_developer_profile", return_value=_TEST_PROFILE),
         patch(
             "agent.server.resolve_run_sandbox",
             new_callable=AsyncMock,

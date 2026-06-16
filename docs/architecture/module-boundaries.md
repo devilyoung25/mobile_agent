@@ -9,11 +9,13 @@ and provider-neutral; attach enterprise systems through adapters.
 engine/
   agent-engine-core/          # Engine package: prompt, assembly, middleware, sandbox state.
 
-packages/
+packages/                     # Agent's own neutral machinery (internal libs, no brand).
   model-launcher/             # Model registry and model construction.
-  mcp-toolset/                # Generic MCP loading plus allow/deny policy.
-  identity-entra/             # Microsoft Entra auth, token encryption, token cache.
-  integration-azure-devops/   # Azure DevOps MCP preset and read-only policy.
+  capability-gateway/         # Capability Gateway: governed tools via adapters (MCP) + policy.
+
+integrations/                 # Brand adapters, pluggable (one external system each).
+  azure-devops/               # Azure DevOps MCP preset and read-only policy.
+  entra/                      # Microsoft Entra auth, token encryption, token cache.
 
 platform/
   dashboard_api/              # FastAPI dashboard/session/orchestration routes.
@@ -33,7 +35,7 @@ agent/
 - `engine/agent-engine-core` must not know about Microsoft Entra, Azure DevOps,
   GitHub, Slack, Linear, or any concrete model provider.
 - MCP integrations live outside the engine and expose tools through
-  `mcp-toolset` policies.
+  `capability-gateway` policies.
 - Identity providers live outside the engine. Tokens must not be exposed to the
   LLM, frontend, workspace, or shell tools.
 - Dashboard/API code belongs in `platform/dashboard_api`, not in the engine.

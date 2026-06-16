@@ -12,7 +12,7 @@ The gateway (lane B) owns, behind this seam:
 - minting per-actor credentials **server-side** — credentials never reach the LLM
   or the workspace; the neutral engine only ever sees resolved tools;
 - applying allow/deny policy and emitting provenance/audit events;
-- dispatching to the backing adapters (MCP, REST, SDK, etc.).
+- dispatching to the backing adapter (MCP today; the seam allows other kinds).
 
 ``project_scope`` is the list of Azure DevOps project names the actor can access
 (produced by ``agent.integrations.azure_devops_mcp.resolve_actor_scope``).

@@ -775,6 +775,24 @@ def _command_prompt_text(content: Any) -> str:
     return ""
 
 
+async def _resolve_run_task_kind(text: str) -> str | None:
+    """Best-effort task classification for a run (auxiliary signal, never fatal).
+
+    Runs the TaskResolver mini-query so the agent composition can tailor context
+    and prompt. Failures degrade to ``None`` (the run proceeds without a task
+    framing); they never block a run.
+    """
+    if not text.strip():
+        return None
+    try:
+        from agent.composition.task_resolution import resolve_task_kind
+
+        return await resolve_task_kind(text)
+    except Exception:  # noqa: BLE001
+        logger.debug("task_kind classification skipped", exc_info=True)
+        return None
+
+
 def _dashboard_images_from_content(content: Any) -> list[DashboardImageBody]:
     """Reconstruct typed image bodies from a command's message content blocks.
 
@@ -897,6 +915,9 @@ async def _enrich_run_start_command(
         actor_id=actor_id,
         email=email,
     )
+    task_kind = await _resolve_run_task_kind(_command_prompt_text(content))
+    if task_kind:
+        merged_configurable["task_kind"] = task_kind
 
     run_metadata = params.get("metadata")
     if not isinstance(run_metadata, dict):
@@ -1031,6 +1052,10 @@ async def _create_queued_followup_run(
         actor_id=actor_id,
         email=email,
     )
+    followup_text = "\n".join(_command_prompt_text(m.get("content")) for m in input_messages)
+    task_kind = await _resolve_run_task_kind(followup_text)
+    if task_kind:
+        configurable["task_kind"] = task_kind
     try:
         run = await client.runs.create(
             thread_id,

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import integration_azure_devops as ado
 import pytest
-from mcp_toolset import McpToolsetProvider, ToolPolicy, filter_tools
+from capability_gateway import McpToolsetProvider, ToolPolicy, filter_tools
 
 
 def test_read_only_policy_allows_read_operations() -> None:

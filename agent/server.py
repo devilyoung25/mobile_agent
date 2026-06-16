@@ -17,12 +17,14 @@ import asyncio
 # Suppress Pydantic v1 compatibility warnings from langchain on Python 3.14+
 warnings.filterwarnings("ignore", message=".*Pydantic V1.*", category=UserWarning)
 
+from capability_gateway import load_tools_for
 from deepagents import create_deep_agent
-from mcp_toolset import load_tools_for
 from on_core import DEFAULT_RECURSION_LIMIT, MODEL_CALL_RECURSION_LIMIT, build_engine
 
 from .composition.approval_resolution import _approval_policy, _has_azure_devops
+from .composition.context_resolution import resolve_operating_context
 from .composition.model_resolution import resolve_model_plan
+from .composition.profile_resolution import resolve_developer_profile
 from .composition.prompt_resolution import (
     _resolve_prompt_default_repo,
     _resolve_repo_custom_instructions,
@@ -35,7 +37,6 @@ from .composition.sandbox_resolution import (
     resolve_run_sandbox,
 )
 from .composition.tool_resolution import (
-    _domain_pack,
     _load_observability_tools,
     _observability_authorized,
 )
@@ -121,18 +122,29 @@ async def get_agent(config: RunnableConfig) -> Pregel:
     repo_custom_instructions = await _resolve_repo_custom_instructions(prompt_default_repo)
 
     observability_authorized = _observability_authorized(config)
-    # Capability Gateway: composition resolves the actor's project scope, then asks
-    # the gateway for governed, resolved tools for this domain pack. Credentials and
-    # provider detail stay inside the gateway; the engine only sees the tools.
-    project_scope, observability_tools = await asyncio.gather(
+    # Capability Gateway: composition resolves the actor's Azure DevOps access,
+    # selects the DeveloperProfile for the run, and asks the gateway for governed,
+    # resolved tools scoped to the profile. Entra stays the authority; the profile
+    # only narrows scope and the engine only ever sees resolved tools.
+    actor_scope, observability_tools = await asyncio.gather(
         resolve_actor_scope(actor_id),
         _load_observability_tools(observability_authorized),
     )
+    developer_profile = resolve_developer_profile(actor_id, actor_scope)
     gateway_tools = await load_tools_for(
         actor_id,
-        domain_pack=_domain_pack(configurable),
-        project_scope=project_scope,
+        domain_pack=developer_profile.domain_pack,
+        project_scope=developer_profile.effective_scope(actor_scope),
     )
+
+    # The TaskResolver (run-creation) classifies the request into a task_kind; the
+    # ContextResolver turns the profile + task into the run's operating context,
+    # rendered as neutral prompt text (the engine never knows the brand/profile).
+    task_kind = configurable.get("task_kind")
+    task_kind = task_kind.strip() if isinstance(task_kind, str) and task_kind.strip() else None
+    operating_context = (
+        await resolve_operating_context(developer_profile, task_kind, actor_scope)
+    ).render()
 
     logger.info("Returning agent with sandbox for thread %s", thread_id)
     return build_engine(
@@ -145,6 +157,7 @@ async def get_agent(config: RunnableConfig) -> Pregel:
             repo_custom_instructions=repo_custom_instructions,
             mode="workspace" if workspace_path else "consultative",
             integration_policy=AZURE_DEVOPS_PROMPT_FRAGMENT if _has_azure_devops(gateway_tools) else None,
+            operating_context=operating_context,
         ),
         tools=[
             http_request,

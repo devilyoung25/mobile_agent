@@ -6,7 +6,7 @@ import logging
 
 from langchain_core.tools import BaseTool
 
-from .adapters import McpAdapter, RestAdapter
+from .adapters import McpAdapter
 from .capabilities import (
     CapabilityAdapter,
     CapabilityContext,
@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 
 _ADAPTERS: dict[str, CapabilityAdapter] = {
     "mcp": McpAdapter(),
-    "rest": RestAdapter(),
 }
 
 

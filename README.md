@@ -30,11 +30,13 @@ apps/
 engine/
   agent-engine-core/         Provider-neutral AgentEngine package.
 
-packages/
+packages/                    Agent's own neutral machinery (internal libs).
   model-launcher/            Model registry and model construction.
-  mcp-toolset/               Generic MCP loading plus tool policy.
-  identity-entra/            Microsoft Entra identity provider.
-  integration-azure-devops/  Azure DevOps MCP preset and read-only policy.
+  capability-gateway/        Capability Gateway: governed tools via adapters (MCP) + policy.
+
+integrations/                Brand adapters, pluggable (one external system each).
+  azure-devops/              Azure DevOps MCP preset and read-only policy.
+  entra/                     Microsoft Entra identity provider.
 
 platform/
   dashboard_api/             Dashboard/session/orchestration API.

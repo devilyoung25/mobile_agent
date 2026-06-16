@@ -1,9 +1,9 @@
 """Capability Gateway contracts.
 
-The gateway exposes governed capabilities as LangChain tools. A capability can
-be backed by an MCP server, a REST API, an SDK, or a future internal adapter; the
-agent only receives already-resolved tools plus non-sensitive provenance
-metadata.
+The gateway exposes governed capabilities as LangChain tools. A capability is
+backed by an MCP server today; the adapter seam leaves room for other kinds
+later. The agent only receives already-resolved tools plus non-sensitive
+provenance metadata.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from langchain_core.tools import BaseTool, StructuredTool
 
 from .policy import ToolPolicy
 
-CapabilityImplementationKind = Literal["mcp", "rest"]
+CapabilityImplementationKind = Literal["mcp"]
 CapabilityPolicyMode = Literal["allow", "deny", "requires_approval"]
 CapabilityCredentialKind = Literal["none", "azure_devops_bearer"]
 
@@ -29,7 +29,7 @@ class CapabilityImplementation:
     config: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if self.kind not in ("mcp", "rest"):
+        if self.kind not in ("mcp",):
             raise ValueError(f"Unsupported capability implementation kind: {self.kind!r}")
 
 

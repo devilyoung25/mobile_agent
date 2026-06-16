@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 from agent.integrations.azure_devops_mcp import resolve_actor_scope
-from mcp_toolset import ToolLoader, load_tools_for
+from capability_gateway import ToolLoader, load_tools_for
 
 
 class _FakeResponse:

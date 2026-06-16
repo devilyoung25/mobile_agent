@@ -28,7 +28,7 @@ FORBIDDEN_TOP_LEVEL = {
     # product layers the neutral engine must not know about
     "integration_azure_devops",
     "identity_entra",
-    "mcp_toolset",
+    "capability_gateway",
     "model_launcher",
     "agent",  # the composition app
 }

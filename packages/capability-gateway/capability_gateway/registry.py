@@ -44,7 +44,7 @@ def get_capability_descriptor(name: str) -> CapabilityDescriptor | None:
 
 def _azure_devops_read_descriptor() -> CapabilityDescriptor:
     # Lazy import avoids a package import cycle: integration_azure_devops imports
-    # mcp_toolset for the generic provider/policy types.
+    # capability_gateway for the generic provider/policy types.
     from integration_azure_devops import READ_ONLY_POLICY
 
     return CapabilityDescriptor(
