@@ -22,6 +22,7 @@ from deepagents import create_deep_agent
 from on_core import DEFAULT_RECURSION_LIMIT, MODEL_CALL_RECURSION_LIMIT, build_engine
 
 from .composition.approval_resolution import _approval_policy, _has_azure_devops
+from .composition.context_providers import context_providers_for_profile
 from .composition.context_resolution import resolve_operating_context
 from .composition.model_resolution import resolve_model_plan
 from .composition.profile_resolution import resolve_developer_profile
@@ -152,7 +153,12 @@ async def get_agent(config: RunnableConfig) -> Pregel:
     task_kind = configurable.get("task_kind")
     task_kind = task_kind.strip() if isinstance(task_kind, str) and task_kind.strip() else None
     operating_context = (
-        await resolve_operating_context(developer_profile, task_kind, actor_scope)
+        await resolve_operating_context(
+            developer_profile,
+            task_kind,
+            actor_scope,
+            providers=context_providers_for_profile(developer_profile),
+        )
     ).render()
 
     # Persist profile/task metadata for UI/audit/debug (not surfaced to the LLM).

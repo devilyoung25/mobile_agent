@@ -89,6 +89,7 @@ async def test_get_agent_scopes_gateway_and_injects_operating_context() -> None:
     assert "TryController 2.0" in prompt
     assert "DevSecOps" not in prompt  # out-of-profile project must not leak in
     assert "Task kind: bug_analysis" in prompt
+    assert "Android engineering context" in prompt
 
     # Profile/task metadata is persisted for UI/audit (merged across update calls).
     persisted: dict[str, object] = {}
